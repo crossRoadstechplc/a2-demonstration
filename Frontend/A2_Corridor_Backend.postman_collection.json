@@ -1,0 +1,634 @@
+{
+  "info": {
+    "_postman_id": "9e5b6df2-f4f8-4c95-84d5-bf9e24a2demo",
+    "name": "A2 Corridor Backend API",
+    "description": "Complete API collection for the A2 Corridor Backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.token) pm.collectionVariables.set('authToken', json.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alice Admin\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"secret123\",\n  \"role\": \"ADMIN\",\n  \"organizationId\": \"ORG-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.token) pm.collectionVariables.set('authToken', json.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"secret123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "GET /auth/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "GET /auth/admin-only",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/admin-only",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "admin-only"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stations",
+      "item": [
+        {
+          "name": "POST /stations",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Addis Hub\",\n  \"location\": \"Addis Ababa\",\n  \"capacity\": 40,\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stations",
+              "host": ["{{baseUrl}}"],
+              "path": ["stations"]
+            }
+          }
+        },
+        {
+          "name": "GET /stations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/stations",
+              "host": ["{{baseUrl}}"],
+              "path": ["stations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fleets",
+      "item": [
+        {
+          "name": "POST /fleets",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Selam Transport\",\n  \"ownerName\": \"Alemu Bekele\",\n  \"region\": \"Addis Ababa\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fleets",
+              "host": ["{{baseUrl}}"],
+              "path": ["fleets"]
+            }
+          }
+        },
+        {
+          "name": "GET /fleets",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/fleets",
+              "host": ["{{baseUrl}}"],
+              "path": ["fleets"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trucks",
+      "item": [
+        {
+          "name": "POST /trucks (STANDARD)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plateNumber\": \"ET-1001\",\n  \"fleetId\": 1,\n  \"truckType\": \"STANDARD\",\n  \"batteryId\": \"BAT-1001\",\n  \"status\": \"READY\",\n  \"currentSoc\": 80,\n  \"currentStationId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trucks",
+              "host": ["{{baseUrl}}"],
+              "path": ["trucks"]
+            }
+          }
+        },
+        {
+          "name": "POST /trucks (REFRIGERATED)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plateNumber\": \"ET-1002\",\n  \"fleetId\": 1,\n  \"truckType\": \"REFRIGERATED\",\n  \"batteryId\": \"BAT-1002\",\n  \"status\": \"READY\",\n  \"currentSoc\": 88,\n  \"refrigerationPowerDraw\": 12,\n  \"temperatureTarget\": 4,\n  \"temperatureCurrent\": 6,\n  \"currentStationId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trucks",
+              "host": ["{{baseUrl}}"],
+              "path": ["trucks"]
+            }
+          }
+        },
+        {
+          "name": "GET /trucks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/trucks",
+              "host": ["{{baseUrl}}"],
+              "path": ["trucks"]
+            }
+          }
+        },
+        {
+          "name": "GET /trucks/refrigerated",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/trucks/refrigerated",
+              "host": ["{{baseUrl}}"],
+              "path": ["trucks", "refrigerated"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /trucks/:id/temperature",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"temperatureCurrent\": 3,\n  \"temperatureTarget\": 4\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trucks/1/temperature",
+              "host": ["{{baseUrl}}"],
+              "path": ["trucks", "1", "temperature"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Drivers",
+      "item": [
+        {
+          "name": "POST /drivers",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Abel Tesfaye\",\n  \"phone\": \"+251911111111\",\n  \"fleetId\": 1,\n  \"rating\": 4.5,\n  \"status\": \"AVAILABLE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/drivers",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers"]
+            }
+          }
+        },
+        {
+          "name": "GET /drivers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/drivers",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers"]
+            }
+          }
+        },
+        {
+          "name": "POST /drivers/:id/rate",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerRating\": 5,\n  \"deliveryFeedback\": \"positive\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/drivers/1/rate",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "1", "rate"]
+            }
+          }
+        },
+        {
+          "name": "POST /drivers/:id/telemetry",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"speed\": 110,\n  \"brakeForce\": 0.9,\n  \"timestamp\": \"2026-03-13T12:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/drivers/1/telemetry",
+              "host": ["{{baseUrl}}"],
+              "path": ["drivers", "1", "telemetry"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Batteries",
+      "item": [
+        {
+          "name": "POST /batteries",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capacityKwh\": 300,\n  \"soc\": 90,\n  \"health\": 97,\n  \"cycleCount\": 120,\n  \"temperature\": 28,\n  \"status\": \"READY\",\n  \"stationId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/batteries",
+              "host": ["{{baseUrl}}"],
+              "path": ["batteries"]
+            }
+          }
+        },
+        {
+          "name": "GET /batteries",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/batteries",
+              "host": ["{{baseUrl}}"],
+              "path": ["batteries"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /batteries/:id/soc",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"soc\": 55.5\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/batteries/1/soc",
+              "host": ["{{baseUrl}}"],
+              "path": ["batteries", "1", "soc"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /batteries/:id/assign-truck",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"truckId\": 1\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/batteries/1/assign-truck",
+              "host": ["{{baseUrl}}"],
+              "path": ["batteries", "1", "assign-truck"]
+            }
+          }
+        },
+        {
+          "name": "PATCH /batteries/:id/assign-station",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"stationId\": 1\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/batteries/1/assign-station",
+              "host": ["{{baseUrl}}"],
+              "path": ["batteries", "1", "assign-station"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Swaps",
+      "item": [
+        {
+          "name": "POST /swaps",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"truckId\": 1,\n  \"stationId\": 1,\n  \"incomingBatteryId\": 2,\n  \"outgoingBatteryId\": 1,\n  \"arrivalSoc\": 20\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/swaps",
+              "host": ["{{baseUrl}}"],
+              "path": ["swaps"]
+            }
+          }
+        },
+        {
+          "name": "GET /swaps",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/swaps",
+              "host": ["{{baseUrl}}"],
+              "path": ["swaps"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Charging",
+      "item": [
+        {
+          "name": "POST /charging/start",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"stationId\": 1,\n  \"batteryId\": 1\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/charging/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["charging", "start"]
+            }
+          }
+        },
+        {
+          "name": "POST /charging/complete",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"sessionId\": 1,\n  \"endSoc\": 90\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/charging/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["charging", "complete"]
+            }
+          }
+        },
+        {
+          "name": "GET /charging/station/:stationId",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/charging/station/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["charging", "station", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Billing",
+      "item": [
+        {
+          "name": "GET /billing/receipts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/billing/receipts",
+              "host": ["{{baseUrl}}"],
+              "path": ["billing", "receipts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Freight",
+      "item": [
+        {
+          "name": "POST /freight/request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pickupLocation\": \"Adama\",\n  \"deliveryLocation\": \"Dire Dawa\",\n  \"cargoDescription\": \"Medical supplies\",\n  \"weight\": 3500,\n  \"volume\": 16,\n  \"pickupWindow\": \"2026-03-17T08:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/freight/request",
+              "host": ["{{baseUrl}}"],
+              "path": ["freight", "request"]
+            }
+          }
+        },
+        {
+          "name": "GET /freight",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/freight",
+              "host": ["{{baseUrl}}"],
+              "path": ["freight"]
+            }
+          }
+        },
+        {
+          "name": "POST /freight/:id/assign",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/freight/1/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["freight", "1", "assign"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "GET /dashboard/a2",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/a2",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "a2"]
+            }
+          }
+        },
+        {
+          "name": "GET /dashboard/station/:id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/station/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "station", "1"]
+            }
+          }
+        },
+        {
+          "name": "GET /dashboard/fleet/:id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/fleet/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "fleet", "1"]
+            }
+          }
+        },
+        {
+          "name": "GET /dashboard/driver/:id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/driver/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "driver", "1"]
+            }
+          }
+        },
+        {
+          "name": "GET /dashboard/eeu",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/eeu",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "eeu"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Simulation",
+      "item": [
+        {
+          "name": "POST /simulation/start",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/simulation/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["simulation", "start"]
+            }
+          }
+        },
+        {
+          "name": "POST /simulation/stop",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/simulation/stop",
+              "host": ["{{baseUrl}}"],
+              "path": ["simulation", "stop"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

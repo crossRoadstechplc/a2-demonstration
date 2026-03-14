@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+:root {
+  --background: #050912;
+  --background-elevated: #0b1322;
+  --background-muted: #111a2d;
+  --foreground: #e7eefb;
+  --foreground-muted: #8e9fbe;
+  --border-subtle: rgba(84, 127, 200, 0.28);
+  --accent: #23c9ff;
+  --accent-strong: #0ea5e9;
+  --warning: #f7b733;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --info: #38bdf8;
+  --neutral: #94a3b8;
+  --grid-line: rgba(25, 53, 93, 0.35);
+  --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
+  --color-background-muted: var(--background-muted);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-border-subtle: var(--border-subtle);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-neutral: var(--neutral);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  background-image: linear-gradient(
+      180deg,
+      rgba(8, 20, 42, 0.95) 0%,
+      rgba(5, 9, 18, 0.96) 34%,
+      rgba(4, 8, 15, 0.98) 100%
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 53px,
+      var(--grid-line) 54px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 53px,
+      var(--grid-line) 54px
+    );
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+* {
+  border-color: var(--border-subtle);
+}
+
+.panel {
+  @apply rounded-2xl border border-border-subtle bg-background-elevated;
+  box-shadow: var(--shadow-soft);
+}
+
+.panel-muted {
+  @apply rounded-2xl border border-border-subtle bg-background-muted;
+}
+
+.panel-padding {
+  @apply p-5 md:p-6;
+}
+
+.dashboard-page {
+  @apply space-y-4 px-4 pb-4 md:space-y-5 md:px-6 md:pb-6;
+}
+
+.dashboard-grid {
+  @apply grid gap-4 md:gap-5;
+}
+
+.card-tight {
+  @apply p-4;
+}
+
+.card-regular {
+  @apply p-5;
+}
+
+.type-label {
+  @apply text-[11px] uppercase tracking-[0.18em] text-foreground-muted;
+}
+
+.type-heading {
+  @apply text-xl font-semibold tracking-tight text-foreground md:text-2xl;
+}
+
+.type-kpi {
+  @apply text-3xl font-semibold text-foreground;
+}

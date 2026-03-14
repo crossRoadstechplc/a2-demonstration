@@ -1,0 +1,232 @@
+import request from "supertest";
+
+import app from "../src/app";
+import { initializeDatabase, runQuery } from "../src/database/connection";
+
+describe("Dashboard aggregation", () => {
+  beforeAll(async () => {
+    await initializeDatabase();
+  });
+
+  beforeEach(async () => {
+    await runQuery(
+      "UPDATE tariff_config SET eeuRatePerKwh = 10, a2ServiceRatePerKwh = 10, vatPercent = 15 WHERE id = 1;"
+    );
+    await runQuery("DELETE FROM receipts;");
+    await runQuery("DELETE FROM charging_sessions;");
+    await runQuery("DELETE FROM swap_transactions;");
+    await runQuery("DELETE FROM batteries;");
+    await runQuery("DELETE FROM shipments;");
+    await runQuery("DELETE FROM driver_telemetry;");
+    await runQuery("DELETE FROM trucks;");
+    await runQuery("DELETE FROM drivers;");
+    await runQuery("DELETE FROM fleets;");
+    await runQuery("DELETE FROM stations;");
+  });
+
+  async function setupDashboardData(): Promise<{
+    stationId: number;
+    fleetId: number;
+    driverId: number;
+  }> {
+    const stationResponse = await request(app).post("/stations").send({
+      name: "Adama",
+      location: "Adama",
+      capacity: 24,
+      status: "ACTIVE"
+    });
+    const stationId = stationResponse.body.station.id as number;
+
+    await request(app).post("/stations").send({
+      name: "Awash",
+      location: "Awash",
+      capacity: 14,
+      status: "INACTIVE"
+    });
+
+    const fleetResponse = await request(app).post("/fleets").send({
+      name: "Abay Logistics",
+      ownerName: "Dawit Mulugeta",
+      region: "Adama"
+    });
+    const fleetId = fleetResponse.body.fleet.id as number;
+
+    const truckOne = await request(app).post("/trucks").send({
+      plateNumber: "ET-6601",
+      fleetId,
+      truckType: "STANDARD",
+      batteryId: "BAT-6601",
+      status: "IN_TRANSIT",
+      currentSoc: 40
+    });
+    const truckOneId = truckOne.body.truck.id as number;
+
+    const truckTwo = await request(app).post("/trucks").send({
+      plateNumber: "ET-6602",
+      fleetId,
+      truckType: "STANDARD",
+      batteryId: "BAT-6602",
+      status: "READY",
+      currentSoc: 85
+    });
+    const truckTwoId = truckTwo.body.truck.id as number;
+
+    const driverOne = await request(app).post("/drivers").send({
+      name: "Abel Tesfaye",
+      phone: "+251933333331",
+      fleetId,
+      rating: 4.2,
+      status: "AVAILABLE"
+    });
+    const driverOneId = driverOne.body.driver.id as number;
+
+    await request(app).post("/drivers").send({
+      name: "Dawit Mekonnen",
+      phone: "+251933333332",
+      fleetId,
+      rating: 4.9,
+      status: "AVAILABLE"
+    });
+
+    const outgoingBattery = await request(app).post("/batteries").send({
+      capacityKwh: 300,
+      soc: 30,
+      health: 95,
+      cycleCount: 210,
+      temperature: 31,
+      status: "IN_TRUCK",
+      truckId: truckOneId
+    });
+    const outgoingBatteryId = outgoingBattery.body.battery.id as number;
+
+    const incomingBattery = await request(app).post("/batteries").send({
+      capacityKwh: 300,
+      soc: 95,
+      health: 98,
+      cycleCount: 60,
+      temperature: 26,
+      status: "READY",
+      stationId
+    });
+    const incomingBatteryId = incomingBattery.body.battery.id as number;
+
+    const chargeBattery = await request(app).post("/batteries").send({
+      capacityKwh: 250,
+      soc: 50,
+      health: 96,
+      cycleCount: 120,
+      temperature: 27,
+      status: "READY",
+      stationId
+    });
+    const chargeBatteryId = chargeBattery.body.battery.id as number;
+
+    await request(app).post("/batteries").send({
+      capacityKwh: 220,
+      soc: 80,
+      health: 97,
+      cycleCount: 90,
+      temperature: 25,
+      status: "READY",
+      stationId
+    });
+
+    await request(app).post("/swaps").send({
+      truckId: truckOneId,
+      stationId,
+      incomingBatteryId,
+      outgoingBatteryId,
+      arrivalSoc: 20
+    });
+
+    await request(app).post("/charging/start").send({
+      stationId,
+      batteryId: chargeBatteryId
+    });
+
+    await request(app).post(`/drivers/${driverOneId}/rate`).send({
+      customerRating: 5,
+      deliveryFeedback: "positive"
+    });
+
+    await request(app).post(`/drivers/${driverOneId}/telemetry`).send({
+      speed: 120,
+      brakeForce: 0.9,
+      timestamp: new Date().toISOString()
+    });
+
+    const shipment = await request(app).post("/freight/request").send({
+      pickupLocation: "Adama",
+      deliveryLocation: "Dire Dawa",
+      cargoDescription: "Medical supplies",
+      weight: 3500,
+      volume: 16,
+      pickupWindow: "2026-03-17T08:00:00.000Z"
+    });
+
+    await request(app).post(`/freight/${shipment.body.shipment.id as number}/assign`).send({});
+
+    const _ = truckTwoId;
+    return { stationId, fleetId, driverId: driverOneId };
+  }
+
+  it("dashboard endpoints return valid data", async () => {
+    const data = await setupDashboardData();
+
+    const a2 = await request(app).get("/dashboard/a2");
+    const station = await request(app).get(`/dashboard/station/${data.stationId}`);
+    const fleet = await request(app).get(`/dashboard/fleet/${data.fleetId}`);
+    const driver = await request(app).get(`/dashboard/driver/${data.driverId}`);
+    const eeu = await request(app).get("/dashboard/eeu");
+
+    expect(a2.status).toBe(200);
+    expect(station.status).toBe(200);
+    expect(fleet.status).toBe(200);
+    expect(driver.status).toBe(200);
+    expect(eeu.status).toBe(200);
+
+    expect(a2.body.activeTrucks).toBeDefined();
+    expect(station.body.batteriesAtStation).toBeDefined();
+    expect(fleet.body.totalTrucks).toBeDefined();
+    expect(driver.body.safetyScore).toBeDefined();
+    expect(eeu.body.energySoldToday).toBeDefined();
+  });
+
+  it("aggregation numbers correct", async () => {
+    const data = await setupDashboardData();
+
+    const a2 = await request(app).get("/dashboard/a2");
+    expect(a2.body.activeTrucks).toBe(2);
+    expect(a2.body.swapsToday).toBe(1);
+    expect(a2.body.batteriesReady).toBe(1);
+    expect(a2.body.energyToday).toBe(225);
+    expect(a2.body.incidents).toBe(1);
+    expect(a2.body.stationsOnline).toBe(1);
+
+    const station = await request(app).get(`/dashboard/station/${data.stationId}`);
+    expect(station.body.batteriesAtStation).toBe(3);
+    expect(station.body.activeChargingSessions).toBe(1);
+    expect(station.body.swapsToday).toBe(1);
+    expect(station.body.energyToday).toBe(225);
+
+    const fleet = await request(app).get(`/dashboard/fleet/${data.fleetId}`);
+    expect(fleet.body.totalTrucks).toBe(2);
+    expect(fleet.body.activeTrucks).toBe(2);
+    expect(fleet.body.availableDrivers).toBe(1);
+    expect(fleet.body.activeShipments).toBe(1);
+
+    const driver = await request(app).get(`/dashboard/driver/${data.driverId}`);
+    expect(driver.body.safetyScore).toBe(92);
+    expect(driver.body.speedViolations).toBe(1);
+    expect(driver.body.harshBrakes).toBe(1);
+    expect(driver.body.completedTrips).toBe(1);
+
+    const eeu = await request(app).get("/dashboard/eeu");
+    expect(eeu.body.swapsToday).toBe(1);
+    expect(eeu.body.energySoldToday).toBe(225);
+    expect(eeu.body.revenueToday).toBe(2250);
+    expect(eeu.body.vatShareToday).toBe(337.5);
+    expect(eeu.body.totalShareToday).toBe(2587.5);
+    expect(eeu.body.activeStations).toBe(1);
+  });
+});
