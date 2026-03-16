@@ -14,8 +14,36 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "A2 E-Corridor Demo Platform",
-  description: "Multi-role operations dashboard foundation",
+  title: "A2 E-Corridor Platform",
+  description:
+    "A2 Access Africa — Real-time operations command for the Ethiopia–Djibouti battery-electric freight corridor. Monitor battery swaps, energy flows, fleet health and station activity.",
+  applicationName: "A2 E-Corridor Platform",
+  keywords: [
+    "A2 Access Africa",
+    "E-Corridor",
+    "Ethiopia Djibouti",
+    "battery swap",
+    "electric freight",
+    "logistics dashboard",
+  ],
+  authors: [{ name: "A2 Access Africa" }],
+  creator: "A2 Access Africa",
+  publisher: "A2 Access Africa",
+
+  openGraph: {
+    type: "website",
+    title: "A2 E-Corridor Platform",
+    description:
+      "Real-time operations command for the Ethiopia–Djibouti battery-electric freight corridor.",
+    siteName: "A2 E-Corridor Platform",
+    images: [{ url: "/android-chrome-512x512.png", width: 512, height: 512, alt: "A2 E-Corridor" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "A2 E-Corridor Platform",
+    description: "Real-time operations command for the Ethiopia–Djibouti battery-electric freight corridor.",
+    images: ["/android-chrome-192x192.png"],
+  },
 };
 
 export default function RootLayout({

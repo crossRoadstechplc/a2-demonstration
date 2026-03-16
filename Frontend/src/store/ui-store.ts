@@ -22,7 +22,7 @@ interface UiStoreState {
 
 export const useUiStore = create<UiStoreState>((set) => ({
   sidebarState: "expanded",
-  themeMode: "dark",
+  themeMode: "light",
   activeOrganizationId: null,
   isMobileMenuOpen: false,
   liveUpdatesEnabled: true,
@@ -35,7 +35,8 @@ export const useUiStore = create<UiStoreState>((set) => ({
   toggleMobileMenu: () =>
     set((state) => ({ isMobileMenuOpen: !state.isMobileMenuOpen })),
   closeMobileMenu: () => set({ isMobileMenuOpen: false }),
-  setThemeMode: (mode) => set({ themeMode: mode }),
+  setThemeMode: (mode) =>
+    set((state) => (state.themeMode === mode ? state : { themeMode: mode })),
   setActiveOrganizationId: (organizationId) =>
     set({ activeOrganizationId: organizationId }),
   setLiveUpdatesEnabled: (enabled) => set({ liveUpdatesEnabled: enabled }),

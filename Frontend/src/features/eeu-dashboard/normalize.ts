@@ -37,6 +37,8 @@ export interface EeuKpis {
   activeChargingSessions: number;
   peakLoadStation: string;
   forecastLoadNext24HoursKw: number;
+  /** Max station utilization % for threshold-based badge (e.g. > 85% danger) */
+  maxUtilizationPct: number;
 }
 
 export interface StationPowerRow {
@@ -61,6 +63,19 @@ export function deriveStationPowerRows(params: {
   chargingSessionsByStation: Record<number, number>;
 }): StationPowerRow[] {
   const eeuRows = asArray(asRecord(params.eeuSummary).stations);
+  const eeuSummary = asRecord(params.eeuSummary);
+  
+  // Get charger counts from backend if available
+  const stationChargerCounts = asArray(eeuSummary.stationChargerCounts) as Array<{
+    stationId: number;
+    activeChargers: number;
+  }>;
+  const chargerCountMap = new Map<number, number>();
+  for (const item of stationChargerCounts) {
+    if (item && typeof item === "object" && "stationId" in item && "activeChargers" in item) {
+      chargerCountMap.set(item.stationId, item.activeChargers);
+    }
+  }
 
   return params.stations.map((station, index) => {
     const fromSummary =
@@ -69,7 +84,10 @@ export function deriveStationPowerRows(params: {
           readNumber(row, ["stationId", "id"]) === station.id ||
           readString(row, ["stationName", "name"]).toLowerCase() === station.name.toLowerCase()
       ) ?? null;
-    const activeChargers = params.chargingSessionsByStation[station.id] ?? 0;
+    
+    // Use real charger count from backend if available, otherwise fall back to charging sessions count
+    const activeChargers = chargerCountMap.get(station.id) ?? params.chargingSessionsByStation[station.id] ?? 0;
+    
     const fallbackLoad = 80 + ((index * 37 + station.id * 17) % 260);
     const liveLoadKw = readNumber(fromSummary, ["liveLoadKw", "powerDrawKw", "loadKw"]) || fallbackLoad;
     const energyTodayKwh =
@@ -104,17 +122,19 @@ export function deriveEeuKpis(params: {
     params.stationRows.reduce((sum, row) => sum + row.energyTodayKwh, 0);
 
   const electricityDeliveredEtb =
-    readNumber(params.billingSummaryEeu, ["electricityDeliveredEtb", "energyCharge", "totalEnergyChargeEtb"]) ||
+    readNumber(params.billingSummaryEeu, ["totalRevenueEtb", "electricityDeliveredEtb", "energyCharge", "totalEnergyChargeEtb"]) ||
     readNumber(params.billingSummaryEeu, ["eeuRevenueShareEtb", "eeuShareEtb"]);
 
   const eeuRevenueShareEtb = readNumber(params.billingSummaryEeu, [
+    "totalEeuShareEtb",
     "eeuRevenueShareEtb",
     "eeuShareEtb",
     "eeuShare",
   ]);
 
-  const peakLoadStation =
-    params.stationRows.sort((a, b) => b.liveLoadKw - a.liveLoadKw)[0]?.stationName ?? "N/A";
+  const sortedByLoad = [...params.stationRows].sort((a, b) => b.liveLoadKw - a.liveLoadKw);
+  const peakLoadStation = sortedByLoad[0]?.stationName ?? "N/A";
+  const maxUtilizationPct = sortedByLoad[0]?.utilizationPct ?? 0;
 
   const forecastLoadNext24HoursKw =
     readNumber(params.eeuSummary, ["forecastLoadNext24HoursKw", "loadForecast24hKw"]) ||
@@ -128,6 +148,7 @@ export function deriveEeuKpis(params: {
     activeChargingSessions: params.activeChargingSessions,
     peakLoadStation,
     forecastLoadNext24HoursKw,
+    maxUtilizationPct,
   };
 }
 

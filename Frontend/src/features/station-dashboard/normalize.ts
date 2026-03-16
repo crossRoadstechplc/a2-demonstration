@@ -41,6 +41,9 @@ export interface StationKpis {
   trucksAtStation: number;
   swapsToday: number;
   energyConsumedToday: number;
+  energyChargingNow: number;
+  revenueTodayEtb: number;
+  revenueThisMonthEtb: number;
   chargerFaultsOpen: number;
   queueSize: number;
 }
@@ -97,7 +100,7 @@ export function deriveStationKpis(params: {
     "energyKwh",
   ]);
   const trucksFromSummary = readNumber(stationSummary, [
-    "trucksCurrentlyAtStation",
+    "trucksAtStationCount",
     "trucksAtStation",
   ]);
 
@@ -113,6 +116,19 @@ export function deriveStationKpis(params: {
     0
   );
 
+  const revenueTodayEtb = readNumber(stationSummary, [
+    "revenueTodayEtb",
+    "revenueToday",
+  ]);
+  const revenueThisMonthEtb = readNumber(stationSummary, [
+    "revenueThisMonthEtb",
+    "revenueThisMonth",
+  ]);
+  const energyChargingNow = readNumber(stationSummary, [
+    "energyChargingNowKwh",
+    "energyChargingNow",
+  ]);
+
   return {
     totalBatteries: stationBatteries.length,
     readyBatteries,
@@ -120,6 +136,9 @@ export function deriveStationKpis(params: {
     trucksAtStation: trucksFromSummary || trucksAtStation.length,
     swapsToday: todaySwapCountFromSummary || swaps.length,
     energyConsumedToday: energyFromSummary || chargingEnergy,
+    energyChargingNow: energyChargingNow || chargingEnergy,
+    revenueTodayEtb,
+    revenueThisMonthEtb,
     chargerFaultsOpen: openFaults,
     queueSize: queueSizeFromSummary,
   };

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,17 +20,29 @@ export function SidebarShell() {
       )}
     >
       <div className="mb-6 px-2">
-        <p
-          className={cn(
-            "text-xs uppercase tracking-[0.2em] text-foreground-muted",
-            sidebarState === "collapsed" && "hidden"
+        <div className={cn(
+          "flex items-center gap-3",
+          sidebarState === "collapsed" && "justify-center"
+        )}>
+          <Image
+            src="/logo.png"
+            alt="A2 Access Africa E-Corridor Logo"
+            width={sidebarState === "expanded" ? 48 : 40}
+            height={sidebarState === "expanded" ? 48 : 40}
+            className="h-auto w-auto shrink-0"
+            priority
+          />
+          {sidebarState === "expanded" && (
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-foreground-muted">
+                A2 E-Corridor
+              </p>
+              <p className="mt-1 text-lg font-semibold text-foreground">
+                Operations
+              </p>
+            </div>
           )}
-        >
-          A2 E-Corridor
-        </p>
-        <p className="mt-1 text-lg font-semibold text-foreground">
-          {sidebarState === "expanded" ? "Operations" : "A2"}
-        </p>
+        </div>
       </div>
 
       <nav className="space-y-1">

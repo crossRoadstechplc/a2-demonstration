@@ -60,7 +60,7 @@ export const SIDEBAR_SECTIONS: SidebarSectionConfig[] = [
   },
   {
     title: "System",
-    items: [{ label: "Login", href: "/login", allowedRoles: ALL_ROLES }],
+    items: [{ label: "Logout", href: "/login", allowedRoles: ALL_ROLES }],
   },
 ];
 

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { OperationsCorridorMap } from "./operations-corridor-map";
 
 interface MapCardShellProps {
   title?: string;
@@ -13,11 +14,7 @@ export function MapCardShell({
     <article className="panel card-regular">
       <p className="type-label">{title}</p>
       <div className="mt-4 h-[340px] rounded-xl border border-border-subtle bg-background-muted p-3">
-        {children ?? (
-          <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border-subtle">
-            <p className="text-sm text-foreground-muted">Map canvas placeholder</p>
-          </div>
-        )}
+        {children ?? <OperationsCorridorMap />}
       </div>
     </article>
   );

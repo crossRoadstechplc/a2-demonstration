@@ -20,7 +20,8 @@ const PAGE_LABEL_MAP: Record<string, string> = {
 
 export function Topbar() {
   const pathname = usePathname();
-  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const themeMode = useUiStore((state) => state.themeMode);
+  const setThemeMode = useUiStore((state) => state.setThemeMode);
   const liveUpdatesEnabled = useUiStore((state) => state.liveUpdatesEnabled);
   const lastLiveSyncAt = useUiStore((state) => state.lastLiveSyncAt);
   const { role } = useAuth();
@@ -36,14 +37,16 @@ export function Topbar() {
 
   return (
     <header className="panel mb-4 flex items-center justify-between gap-3 px-4 py-3 md:mb-5 md:px-5">
-      <div className="min-w-0">
-        <p className="type-label">A2 Network Live</p>
-        <h1 className="truncate text-lg font-semibold text-foreground md:text-xl">
-          {pageLabel}
-        </h1>
-        <p className="mt-1 text-xs text-foreground-muted">
-          {role ? ROLE_DISPLAY_NAME[role] : "Authentication required"}
-        </p>
+      <div className="flex items-center gap-4 min-w-0">
+        <div className="min-w-0">
+          <p className="type-label">A2 Network Live</p>
+          <h1 className="truncate text-lg font-semibold text-foreground md:text-xl">
+            {pageLabel}
+          </h1>
+          <p className="mt-1 text-xs text-foreground-muted">
+            {role ? ROLE_DISPLAY_NAME[role] : "Authentication required"}
+          </p>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <LiveRefreshIndicator
@@ -52,14 +55,14 @@ export function Topbar() {
           lastSyncAt={lastLiveSyncAt}
           compact
         />
-        <DemoControls />
         <button
           type="button"
-          onClick={toggleSidebar}
+          onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
           className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2 text-xs font-medium text-foreground transition hover:border-accent hover:text-accent"
         >
-          Toggle
+          {themeMode === "dark" ? "Light Mode" : "Dark Mode"}
         </button>
+        <DemoControls />
         <UserMenu />
       </div>
     </header>

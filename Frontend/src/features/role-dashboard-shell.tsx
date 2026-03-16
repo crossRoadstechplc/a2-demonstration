@@ -23,7 +23,7 @@ export function RoleDashboardShell({ roleLabel, subtitle }: RoleDashboardShellPr
         eyebrow="A2 Corridor / Control Layer"
         title={`${roleLabel} Dashboard Shell`}
         description={subtitle}
-        actions={<StatusBadge label="Prototype" variant="info" />}
+        actions={<StatusBadge label="Demo" variant="info" />}
       />
 
       <FilterBar>

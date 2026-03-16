@@ -11,7 +11,9 @@ import { EmptyPlaceholder } from "@/components/ui/empty-placeholder";
 import { ErrorState } from "@/components/ui/error-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { FormField } from "@/components/ui/form-field";
+import { OperationsCorridorMap } from "@/components/dashboard/operations-corridor-map";
 import { PageHeader } from "@/components/ui/page-header";
+import type { Station } from "@/types/station";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { LiveRefreshIndicator } from "@/components/ui/live-refresh-indicator";
 import { queryKeys } from "@/constants/query-keys";
@@ -23,16 +25,18 @@ import { freightService } from "@/services/freight.service";
 import { useNotificationStore } from "@/store/notification-store";
 
 import { FreightDashboardSkeleton } from "./freight-dashboard-skeleton";
+import { deriveFreightKpiStatus } from "./freight-kpi-thresholds";
 import {
   deriveAvailableTrucks,
   deriveFreightKpis,
   deriveTrackingEvents,
   estimateFreightPrice,
+  type AvailableTruckWithDistance,
 } from "./normalize";
 
 interface FreightBookingForm {
-  pickupLocation: string;
-  deliveryLocation: string;
+  pickupStationId: number | null;
+  deliveryStationId: number | null;
   cargoDescription: string;
   weight: number;
   volume: number;
@@ -41,9 +45,23 @@ interface FreightBookingForm {
   temperatureTarget: number;
 }
 
+const STATION_COORDS: Record<string, { lat: number; lng: number }> = {
+  "Addis Ababa (Main Hub)": { lat: 8.9806, lng: 38.7578 },
+  Adama: { lat: 8.54, lng: 39.27 },
+  Awash: { lat: 8.98, lng: 40.17 },
+  Mieso: { lat: 9.24, lng: 40.75 },
+  "Dire Dawa": { lat: 9.6, lng: 41.86 },
+  "Semera / Mille area": { lat: 11.79, lng: 41.01 },
+  "Djibouti Port Gateway": { lat: 11.58, lng: 43.15 },
+};
+
+function getStationCoords(stationName: string): { lat: number; lng: number } | null {
+  return STATION_COORDS[stationName] ?? null;
+}
+
 const initialForm: FreightBookingForm = {
-  pickupLocation: "Adama Industrial Zone",
-  deliveryLocation: "Dire Dawa Warehouse",
+  pickupStationId: null,
+  deliveryStationId: null,
   cargoDescription: "Coffee Sacks",
   weight: 8.5,
   volume: 18,
@@ -65,23 +83,48 @@ export function FreightDashboard() {
   const [form, setForm] = useState<FreightBookingForm>(initialForm);
   const [selectedShipmentId, setSelectedShipmentId] = useState<number | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [kpiTimeframe, setKpiTimeframe] = useState<"daily" | "monthly" | "yearly">("daily");
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof FreightBookingForm, string>>>(
     {}
   );
 
   const shipmentsQuery = appQueries.useShipments();
   const trucksQuery = appQueries.useTrucks();
+  const batteriesQuery = appQueries.useBatteries();
   const driversQuery = appQueries.useDrivers();
   const stationsQuery = appQueries.useStations();
 
   const customerId = useMemo(() => {
+    // For freight customers, customerId should equal their user id
+    if (user?.role === "FREIGHT_CUSTOMER") {
+      // Try user.id first (preferred)
+      if (user.id && Number.isFinite(Number(user.id))) {
+        return Number(user.id);
+      }
+      // Fallback to organizationId (which should equal user.id for freight customers)
+      if (user.organizationId && Number.isFinite(Number(user.organizationId))) {
+        return Number(user.organizationId);
+      }
+      // If neither is available, try to get from shipments
+      const fromShipment = shipmentsQuery.data?.find((item) => item.customerId)?.customerId;
+      if (fromShipment && Number.isFinite(Number(fromShipment))) {
+        return Number(fromShipment);
+      }
+      // Last resort: return 0 to prevent invalid API calls
+      console.warn("Freight customer ID not found. User:", user);
+      return 0;
+    }
+    // For other roles, use organizationId
     const fromUser = Number(user?.organizationId);
     if (Number.isFinite(fromUser) && fromUser > 0) return fromUser;
     const fromShipment = shipmentsQuery.data?.find((item) => item.customerId)?.customerId;
     return fromShipment ?? 1;
-  }, [user?.organizationId, shipmentsQuery.data]);
+  }, [user?.id, user?.role, user?.organizationId, shipmentsQuery.data]);
 
-  const freightSummaryQuery = appQueries.useFreightSummary(customerId);
+  const freightSummaryQuery = appQueries.useFreightSummary(
+    customerId > 0 ? customerId : 0,
+    kpiTimeframe
+  );
 
   const shipmentOptions = useMemo(() => shipmentsQuery.data ?? [], [shipmentsQuery.data]);
   const defaultShipmentId =
@@ -105,15 +148,30 @@ export function FreightDashboard() {
 
   const createShipmentMutation = useAppMutation(freightService.request);
 
+  // Show error if customer ID cannot be determined for freight customers
+  if (user?.role === "FREIGHT_CUSTOMER" && customerId === 0) {
+    return (
+      <div className="panel panel-padding">
+        <PageHeader title="Freight Dashboard" />
+        <ErrorState
+          title="Unable to load"
+          message="Please log in again."
+        />
+      </div>
+    );
+  }
+
   const isLoading =
     shipmentsQuery.isLoading ||
     trucksQuery.isLoading ||
+    batteriesQuery.isLoading ||
     driversQuery.isLoading ||
     stationsQuery.isLoading ||
     freightSummaryQuery.isLoading;
   const hasError =
     shipmentsQuery.isError ||
     trucksQuery.isError ||
+    batteriesQuery.isError ||
     driversQuery.isError ||
     stationsQuery.isError ||
     freightSummaryQuery.isError;
@@ -123,9 +181,45 @@ export function FreightDashboard() {
     [shipmentOptions, freightSummaryQuery.data]
   );
 
+  const kpiStatus = useMemo(() => deriveFreightKpiStatus(kpis), [kpis]);
+
+  // Get stations where trucks are parked (fleet stations)
+  const fleetStations = useMemo(() => {
+    const trucks = trucksQuery.data ?? [];
+    const stationIds = new Set<number>();
+    trucks.forEach((truck) => {
+      if (truck.currentStationId !== null) {
+        stationIds.add(truck.currentStationId);
+      }
+    });
+    return (stationsQuery.data ?? []).filter((station) => stationIds.has(station.id));
+  }, [trucksQuery.data, stationsQuery.data]);
+
+  // All selectable stations (7 corridor stations + fleet stations)
+  const selectableStations = useMemo(() => {
+    const allStations = stationsQuery.data ?? [];
+    const stationMap = new Map<number, Station>();
+    allStations.forEach((station) => {
+      stationMap.set(station.id, station);
+    });
+    return Array.from(stationMap.values());
+  }, [stationsQuery.data]);
+
+  // Get pickup station coordinates
+  const pickupStation = useMemo(() => {
+    if (form.pickupStationId === null) return null;
+    return selectableStations.find((s) => s.id === form.pickupStationId) ?? null;
+  }, [form.pickupStationId, selectableStations]);
+
+  const pickupCoords = useMemo(() => {
+    if (!pickupStation) return { lat: null, lng: null };
+    const coords = getStationCoords(pickupStation.name);
+    return coords ? { lat: coords.lat, lng: coords.lng } : { lat: null, lng: null };
+  }, [pickupStation]);
+
   const availableTrucks = useMemo(
-    () => deriveAvailableTrucks(trucksQuery.data ?? []),
-    [trucksQuery.data]
+    () => deriveAvailableTrucks(trucksQuery.data ?? [], pickupCoords.lat, pickupCoords.lng),
+    [trucksQuery.data, pickupCoords.lat, pickupCoords.lng]
   );
 
   const selectedShipment = shipmentDetailQuery.data;
@@ -161,35 +255,48 @@ export function FreightDashboard() {
   );
 
   const liveStatus = useSmartPolling({
-    queries: [shipmentsQuery, trackingQuery, shipmentDetailQuery, freightSummaryQuery, trucksQuery],
+    queries: [
+      shipmentsQuery,
+      trackingQuery,
+      shipmentDetailQuery,
+      freightSummaryQuery,
+      trucksQuery,
+      batteriesQuery,
+    ],
     enabled: true,
     intervalMs: 12_000,
   });
 
   async function submitBooking() {
-    try {
-      const optimisticId = Date.now();
-      const optimisticShipment = {
-        id: optimisticId,
-        customerId,
-        status: "REQUESTED",
-        pickupLocation: form.pickupLocation,
-        deliveryLocation: form.deliveryLocation,
-        cargoDescription: form.cargoDescription,
-        weight: form.weight,
-        volume: form.volume,
-        pickupWindow: form.pickupWindow,
-        requiresRefrigeration: form.requiresRefrigeration ? 1 : 0,
-        temperatureTarget: form.requiresRefrigeration ? form.temperatureTarget : null,
-      };
-      queryClient.setQueryData(queryKeys.freight.all, (old: unknown) => {
-        if (!Array.isArray(old)) return [optimisticShipment];
-        return [optimisticShipment, ...old];
-      });
+    if (form.pickupStationId === null || form.deliveryStationId === null) {
+      notifyError("Please select pickup and delivery stations.");
+      return;
+    }
 
+    const pickupStation = selectableStations.find((s) => s.id === form.pickupStationId);
+    const deliveryStation = selectableStations.find((s) => s.id === form.deliveryStationId);
+
+    if (!pickupStation || !deliveryStation) {
+      notifyError("Selected stations not found.");
+      return;
+    }
+
+    const pickupCoords = getStationCoords(pickupStation.name);
+    const deliveryCoords = getStationCoords(deliveryStation.name);
+
+    if (!pickupCoords || !deliveryCoords) {
+      notifyError("Station coordinates not available.");
+      return;
+    }
+
+    try {
       const shipment = await createShipmentMutation.mutateAsync({
-        pickupLocation: form.pickupLocation,
-        deliveryLocation: form.deliveryLocation,
+        pickupLocation: pickupStation.name,
+        pickupLat: pickupCoords.lat,
+        pickupLng: pickupCoords.lng,
+        deliveryLocation: deliveryStation.name,
+        deliveryLat: deliveryCoords.lat,
+        deliveryLng: deliveryCoords.lng,
         cargoDescription: form.cargoDescription,
         weight: form.weight,
         volume: form.volume,
@@ -199,17 +306,25 @@ export function FreightDashboard() {
       });
       notifySuccess("Shipment request created successfully");
       setSelectedShipmentId(shipment.id);
+      setForm(initialForm);
       await Promise.all([shipmentsQuery.refetch(), freightSummaryQuery.refetch()]);
-    } catch {
-      await shipmentsQuery.refetch();
-      notifyError("Failed to create shipment request");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create shipment request";
+      notifyError(message, "Booking failed");
     }
   }
 
   function validateForm(): boolean {
     const errors: Partial<Record<keyof FreightBookingForm, string>> = {};
-    if (!form.pickupLocation.trim()) errors.pickupLocation = "Pickup location is required.";
-    if (!form.deliveryLocation.trim()) errors.deliveryLocation = "Delivery destination is required.";
+    if (form.pickupStationId === null) {
+      errors.pickupStationId = "Pickup station must be selected.";
+    }
+    if (form.deliveryStationId === null) {
+      errors.deliveryStationId = "Delivery station must be selected.";
+    }
+    if (form.pickupStationId !== null && form.deliveryStationId !== null && form.pickupStationId === form.deliveryStationId) {
+      errors.deliveryStationId = "Delivery station must be different from pickup station.";
+    }
     if (!form.cargoDescription.trim()) errors.cargoDescription = "Cargo description is required.";
     if (!(form.weight > 0)) errors.weight = "Weight must be greater than zero.";
     if (!(form.volume > 0)) errors.volume = "Volume must be greater than zero.";
@@ -234,6 +349,7 @@ export function FreightDashboard() {
     await Promise.all([
       shipmentsQuery.refetch(),
       trucksQuery.refetch(),
+      batteriesQuery.refetch(),
       driversQuery.refetch(),
       stationsQuery.refetch(),
       freightSummaryQuery.refetch(),
@@ -264,24 +380,51 @@ export function FreightDashboard() {
         }
       />
 
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-foreground">KPI Timeframe:</label>
+          <select
+            value={kpiTimeframe}
+            onChange={(e) => setKpiTimeframe(e.target.value as "daily" | "monthly" | "yearly")}
+            className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2 text-sm text-foreground"
+          >
+            <option value="daily">Daily</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+      </div>
+
       <section className="dashboard-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-        <KPIStatCard label="Total Shipments" value={String(kpis.totalShipments)} status="neutral" />
-        <KPIStatCard label="Active Shipments" value={String(kpis.activeShipments)} status="info" />
         <KPIStatCard
-          label="Delivered Shipments"
+          label={`Total Shipments (${kpiTimeframe})`}
+          value={String(kpis.totalShipments)}
+          status={kpiStatus.totalShipments}
+        />
+        <KPIStatCard
+          label={`Active Shipments (${kpiTimeframe})`}
+          value={String(kpis.activeShipments)}
+          status={kpiStatus.activeShipments}
+        />
+        <KPIStatCard
+          label={`Delivered Shipments (${kpiTimeframe})`}
           value={String(kpis.deliveredShipments)}
-          status="success"
+          status={kpiStatus.deliveredShipments}
         />
-        <KPIStatCard label="Estimated Spend" value={formatEtb(kpis.estimatedSpendEtb)} status="warning" />
         <KPIStatCard
-          label="Refrigerated Shipments"
+          label={`Estimated Spend (${kpiTimeframe})`}
+          value={formatEtb(kpis.estimatedSpendEtb)}
+          status={kpiStatus.estimatedSpendEtb}
+        />
+        <KPIStatCard
+          label={`Refrigerated Shipments (${kpiTimeframe})`}
           value={String(kpis.refrigeratedShipments)}
-          status="info"
+          status={kpiStatus.refrigeratedShipments}
         />
         <KPIStatCard
-          label="Pending Delivery Confirmations"
+          label={`Pending Delivery Confirmations (${kpiTimeframe})`}
           value={String(kpis.pendingDeliveryConfirmations)}
-          status={kpis.pendingDeliveryConfirmations > 0 ? "warning" : "success"}
+          status={kpiStatus.pendingDeliveryConfirmations}
         />
       </section>
 
@@ -290,31 +433,68 @@ export function FreightDashboard() {
           <p className="type-label">1) New Freight Booking Form</p>
           <form className="mt-3 space-y-3" onSubmit={onSubmitBooking}>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <FormField label="Pickup Location" error={formErrors.pickupLocation}>
-                <input
-                  value={form.pickupLocation}
-                  onChange={(event) => setForm((old) => ({ ...old, pickupLocation: event.target.value }))}
+              <FormField label="Pickup Station" error={formErrors.pickupStationId}>
+                <select
+                  value={form.pickupStationId ?? ""}
+                  onChange={(event) =>
+                    setForm((old) => ({
+                      ...old,
+                      pickupStationId: event.target.value ? Number(event.target.value) : null,
+                    }))
+                  }
                   className="w-full rounded-xl border border-border-subtle bg-background-muted px-3 py-2 text-sm text-foreground"
                   required
-                />
+                >
+                  <option value="">Select pickup station</option>
+                  {selectableStations.map((station) => (
+                    <option key={station.id} value={station.id}>
+                      {station.name} {station.location ? `(${station.location})` : ""}
+                    </option>
+                  ))}
+                </select>
+                {pickupStation && (
+                  <p className="mt-1 text-xs text-foreground-muted">
+                    {fleetStations.some((s) => s.id === pickupStation.id)
+                      ? "✓ Trucks available at this station"
+                      : "No trucks currently parked here"}
+                  </p>
+                )}
               </FormField>
-              <FormField label="Delivery Destination" error={formErrors.deliveryLocation}>
-                <input
-                  value={form.deliveryLocation}
-                  onChange={(event) => setForm((old) => ({ ...old, deliveryLocation: event.target.value }))}
+              <FormField label="Delivery Station" error={formErrors.deliveryStationId}>
+                <select
+                  value={form.deliveryStationId ?? ""}
+                  onChange={(event) =>
+                    setForm((old) => ({
+                      ...old,
+                      deliveryStationId: event.target.value ? Number(event.target.value) : null,
+                    }))
+                  }
                   className="w-full rounded-xl border border-border-subtle bg-background-muted px-3 py-2 text-sm text-foreground"
                   required
-                />
+                >
+                  <option value="">Select delivery station</option>
+                  {selectableStations.map((station) => (
+                    <option key={station.id} value={station.id}>
+                      {station.name} {station.location ? `(${station.location})` : ""}
+                    </option>
+                  ))}
+                </select>
               </FormField>
             </div>
 
             <FormField label="Cargo Description" error={formErrors.cargoDescription}>
-              <input
+              <textarea
                 value={form.cargoDescription}
                 onChange={(event) => setForm((old) => ({ ...old, cargoDescription: event.target.value }))}
-                className="w-full rounded-xl border border-border-subtle bg-background-muted px-3 py-2 text-sm text-foreground"
+                className="w-full rounded-xl border border-border-subtle bg-background-muted px-3 py-3 text-sm text-foreground"
+                rows={4}
+                maxLength={500}
+                placeholder="Describe the cargo in detail (e.g., type, packaging, special handling requirements)"
                 required
               />
+              <p className="mt-1 text-xs text-foreground-muted">
+                {form.cargoDescription.length}/500 characters
+              </p>
             </FormField>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -397,16 +577,39 @@ export function FreightDashboard() {
           <div className="mt-3 space-y-2">
             {availableTrucks.length === 0 ? (
               <EmptyPlaceholder title="No available trucks" />
+            ) : form.pickupStationId === null ? (
+              <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-foreground-muted">
+                Select pickup station to see distance-based ranking
+              </div>
             ) : (
               availableTrucks.map((truck, index) => (
                 <div key={truck.id} className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-foreground">{truck.plateNumber}</p>
-                    {index === 0 ? <StatusBadge label="Best Match" variant="success" /> : null}
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        License Plate: {truck.plateNumber}
+                      </p>
+                      <p className="mt-0.5 text-xs text-foreground-muted">
+                        Location: {truck.locationLabel}
+                        {truck.simulatedLat !== null && truck.simulatedLat !== undefined && (
+                          <span className="ml-1 text-[10px] opacity-60">(simulated)</span>
+                        )}
+                      </p>
+                    </div>
+                    {index === 0 ? <StatusBadge label="Top Match" variant="success" /> : null}
                   </div>
-                  <p className="mt-1 text-xs text-foreground-muted">
-                    SOC {truck.currentSoc}% · {truck.truckType}
-                  </p>
+                  <div className="mt-1.5 flex items-center justify-between text-xs">
+                    <span className="text-foreground-muted">
+                      {truck.distanceKm !== null
+                        ? `${truck.distanceKm.toFixed(1)} km from pickup`
+                        : form.pickupStationId === null
+                          ? "Select pickup station to see distance"
+                          : "Distance unavailable"}
+                    </span>
+                    <span className="text-foreground-muted">
+                      SOC {truck.currentSoc}% · {truck.truckType}
+                    </span>
+                  </div>
                 </div>
               ))
             )}
@@ -449,14 +652,18 @@ export function FreightDashboard() {
 
         <article className="panel card-regular xl:col-span-2">
           <p className="type-label">5) Shipment Tracking Map</p>
-          <div className="mt-3 h-52 rounded-xl border border-border-subtle bg-[linear-gradient(180deg,#0b1322,#091120)] p-3">
-            <p className="text-sm text-foreground-muted">Map placeholder with corridor route and live markers</p>
-            <p className="mt-2 text-sm text-foreground">
-              {selectedShipment
-                ? `${selectedShipment.pickupLocation} → ${selectedShipment.deliveryLocation}`
-                : "Select shipment to track"}
-            </p>
+          <div className="mt-3 h-64">
+            <OperationsCorridorMap
+              stations={stationsQuery.data}
+              trucks={trucksQuery.data}
+              batteries={batteriesQuery.data}
+            />
           </div>
+          <p className="mt-2 text-sm text-foreground">
+            {selectedShipment
+              ? `${selectedShipment.pickupLocation} → ${selectedShipment.deliveryLocation}`
+              : "Select shipment to track"}
+          </p>
         </article>
       </section>
 
@@ -615,7 +822,7 @@ export function FreightDashboard() {
         confirming={createShipmentMutation.isPending}
       >
         <div className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2 text-xs text-foreground-muted">
-          {form.pickupLocation} to {form.deliveryLocation} · {formatEtb(estimatedPrice)}
+          {pickupStation?.name ?? "Pickup"} to {selectableStations.find((s) => s.id === form.deliveryStationId)?.name ?? "Delivery"} · {formatEtb(estimatedPrice)}
         </div>
       </ConfirmModal>
     </div>

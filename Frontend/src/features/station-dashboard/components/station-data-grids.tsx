@@ -1,5 +1,7 @@
 import { EmptyPlaceholder } from "@/components/ui/empty-placeholder";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { usePagination } from "@/hooks/use-pagination";
 import type { Battery } from "@/types/battery";
 import type { ChargerFault, StationIncident } from "@/types/station";
 import type { SwapTransaction } from "@/types/swap";
@@ -36,6 +38,12 @@ export function StationDataGrids({
   incidents,
   faults,
 }: StationDataGridsProps) {
+  const batteriesPagination = usePagination(batteries, 10);
+  const sessionsPagination = usePagination(chargingSessions, 8);
+  const swapsPagination = usePagination(swaps, 8);
+  const trucksPagination = usePagination(trucksAtStation, 8);
+  const incidentsPagination = usePagination(incidents, 8);
+  const chargerPagination = usePagination(chargerRows, 12);
   const readyBatteries = batteries.filter((battery) => battery.status === "READY").slice(0, 8);
 
   return (
@@ -63,7 +71,7 @@ export function StationDataGrids({
                     </td>
                   </tr>
                 ) : (
-                  batteries.map((battery) => (
+                  batteriesPagination.paginatedItems.map((battery) => (
                     <tr key={battery.id} className="border-t border-border-subtle">
                       <td className="px-3 py-2 text-foreground">BAT-{battery.id}</td>
                       <td className="px-3 py-2">
@@ -82,6 +90,7 @@ export function StationDataGrids({
               </tbody>
             </table>
           </div>
+          <PaginationControls {...batteriesPagination} onPrev={batteriesPagination.prev} onNext={batteriesPagination.next} />
         </article>
 
         <article className="panel card-regular">
@@ -114,14 +123,17 @@ export function StationDataGrids({
           <p className="type-label">4) Charging Sessions List</p>
           <div className="mt-3 space-y-2">
             {chargingSessions.length === 0 ? (
-              <EmptyPlaceholder title="No active charging sessions" />
+              <EmptyPlaceholder
+                title="No active charging sessions"
+                description="No batteries are currently charging at this station."
+              />
             ) : (
-              chargingSessions.slice(0, 10).map((session, index) => (
+              sessionsPagination.paginatedItems.map((session, index) => (
                 <div
                   key={`${index}`}
                   className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2"
                 >
-                  <p className="text-sm text-foreground">Session #{index + 1}</p>
+                  <p className="text-sm text-foreground">Session #{(sessionsPagination.page - 1) * sessionsPagination.pageSize + index + 1}</p>
                   <p className="mt-1 text-xs text-foreground-muted">
                     Battery {String(session.batteryId ?? "-")} · Status{" "}
                     {String(session.status ?? "ACTIVE")}
@@ -130,15 +142,19 @@ export function StationDataGrids({
               ))
             )}
           </div>
+          <PaginationControls {...sessionsPagination} onPrev={sessionsPagination.prev} onNext={sessionsPagination.next} />
         </article>
 
         <article className="panel card-regular">
           <p className="type-label">5) Swap Transaction History</p>
           <div className="mt-3 space-y-2">
             {swaps.length === 0 ? (
-              <EmptyPlaceholder title="No swap transactions today" />
+              <EmptyPlaceholder
+                title="No swap transactions today"
+                description="No swaps completed at this station yet today."
+              />
             ) : (
-              swaps.slice(0, 10).map((swap) => (
+              swapsPagination.paginatedItems.map((swap) => (
                 <div
                   key={swap.id}
                   className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2"
@@ -151,6 +167,7 @@ export function StationDataGrids({
               ))
             )}
           </div>
+          <PaginationControls {...swapsPagination} onPrev={swapsPagination.prev} onNext={swapsPagination.next} />
         </article>
       </section>
 
@@ -161,7 +178,7 @@ export function StationDataGrids({
             {trucksAtStation.length === 0 ? (
               <EmptyPlaceholder title="No trucks currently parked" />
             ) : (
-              trucksAtStation.map((truck) => (
+              trucksPagination.paginatedItems.map((truck) => (
                 <div key={truck.id} className="rounded-xl border border-border-subtle px-3 py-2">
                   <p className="text-sm font-medium text-foreground">{truck.plateNumber}</p>
                   <p className="mt-1 text-xs text-foreground-muted">
@@ -171,33 +188,54 @@ export function StationDataGrids({
               ))
             )}
           </div>
+          <PaginationControls {...trucksPagination} onPrev={trucksPagination.prev} onNext={trucksPagination.next} />
         </article>
 
         <article className="panel card-regular">
-          <p className="type-label">7) Incoming Truck Predictions</p>
+          <p className="type-label">7) Incidents</p>
           <div className="mt-3 space-y-2">
-            {predictions.length === 0 ? (
-              <EmptyPlaceholder title="No incoming predictions available" />
+            {incidents.length === 0 ? (
+              <EmptyPlaceholder
+                title="No incidents"
+                description="Station operating normally."
+              />
             ) : (
-              predictions.map((item, index) => (
-                <div key={`${item.truckLabel}-${index}`} className="rounded-xl border border-border-subtle px-3 py-2">
-                  <p className="text-sm text-foreground">{item.truckLabel}</p>
-                  <p className="mt-1 text-xs text-foreground-muted">
-                    ETA {item.eta} · Est. SOC {item.estimatedSoc}%
-                  </p>
+              incidentsPagination.paginatedItems.map((incident) => (
+                <div
+                  key={incident.id}
+                  className="rounded-xl border border-border-subtle px-3 py-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-foreground">{incident.type ?? "Incident"}</p>
+                    <StatusBadge
+                      label={incident.severity}
+                      variant={
+                        incident.severity === "CRITICAL"
+                          ? "danger"
+                          : incident.severity === "HIGH"
+                            ? "warning"
+                            : "info"
+                      }
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-foreground-muted">{incident.message ?? ""}</p>
                 </div>
               ))
             )}
           </div>
+          <PaginationControls {...incidentsPagination} onPrev={incidentsPagination.prev} onNext={incidentsPagination.next} />
         </article>
 
         <article className="panel card-regular">
           <p className="type-label">8) Charger Operational Status</p>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {chargerRows.length === 0 ? (
-              <EmptyPlaceholder title="No charger telemetry available" />
+              <EmptyPlaceholder
+                title="No charger telemetry available"
+                description="Charger status will appear when sessions are active."
+              />
             ) : (
-              chargerRows.map((row) => (
+              chargerPagination.paginatedItems.map((row) => (
                 <div key={row.chargerId} className="rounded-xl border border-border-subtle px-3 py-2">
                   <p className="text-sm font-medium text-foreground">{row.chargerId}</p>
                   <div className="mt-1 flex items-center justify-between">
@@ -217,59 +255,7 @@ export function StationDataGrids({
               ))
             )}
           </div>
-        </article>
-      </section>
-
-      <section className="dashboard-grid grid-cols-1 lg:grid-cols-2">
-        <article className="panel card-regular">
-          <p className="type-label">9) Station Incidents Panel</p>
-          <div className="mt-3 space-y-2">
-            {incidents.length === 0 ? (
-              <EmptyPlaceholder title="No active incidents" />
-            ) : (
-              incidents.map((incident) => (
-                <div key={incident.id} className="rounded-xl border border-border-subtle px-3 py-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-foreground">{incident.type}</p>
-                    <StatusBadge
-                      label={incident.severity}
-                      variant={
-                        incident.severity.toUpperCase() === "HIGH"
-                          ? "danger"
-                          : incident.severity.toUpperCase() === "MEDIUM"
-                            ? "warning"
-                            : "info"
-                      }
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-foreground-muted">{incident.message}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </article>
-
-        <article className="panel card-regular">
-          <p className="type-label">10) Queue / Congestion Panel</p>
-          <div className="mt-3 space-y-2">
-            <div className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2">
-              <p className="text-xs uppercase text-foreground-muted">Queue Alerts</p>
-              <p className="mt-1 text-sm text-foreground">
-                {incidents.filter((item) => item.type.toUpperCase().includes("QUEUE")).length} active
-                queue-related incidents
-              </p>
-            </div>
-            <div className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2">
-              <p className="text-xs uppercase text-foreground-muted">Open Charger Faults</p>
-              <p className="mt-1 text-sm text-foreground">{faults.length} open/active issues</p>
-            </div>
-            <div className="rounded-xl border border-border-subtle bg-background-muted px-3 py-2">
-              <p className="text-xs uppercase text-foreground-muted">Queue Severity</p>
-              <p className="mt-1 text-sm text-foreground">
-                {faults.length + incidents.length > 6 ? "High" : "Moderate"}
-              </p>
-            </div>
-          </div>
+          <PaginationControls {...chargerPagination} onPrev={chargerPagination.prev} onNext={chargerPagination.next} />
         </article>
       </section>
     </>

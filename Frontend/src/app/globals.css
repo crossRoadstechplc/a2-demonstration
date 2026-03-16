@@ -18,6 +18,24 @@
   --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.35);
 }
 
+html.light {
+  --background: #edf2fb;
+  --background-elevated: #ffffff;
+  --background-muted: #e6ecf8;
+  --foreground: #10203b;
+  --foreground-muted: #526787;
+  --border-subtle: rgba(69, 102, 163, 0.22);
+  --accent: #0ea5e9;
+  --accent-strong: #0284c7;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --info: #0284c7;
+  --neutral: #64748b;
+  --grid-line: rgba(84, 127, 200, 0.15);
+  --shadow-soft: 0 12px 28px rgba(44, 64, 97, 0.12);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-background-elevated: var(--background-elevated);
@@ -36,8 +54,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
-html {
+html.dark {
   color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
 }
 
 body {
@@ -62,6 +84,27 @@ body {
     );
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+html.light body {
+  background-image: linear-gradient(
+      180deg,
+      rgba(238, 244, 255, 0.94) 0%,
+      rgba(232, 239, 251, 0.96) 38%,
+      rgba(226, 235, 250, 0.98) 100%
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 53px,
+      var(--grid-line) 54px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 53px,
+      var(--grid-line) 54px
+    );
 }
 
 * {

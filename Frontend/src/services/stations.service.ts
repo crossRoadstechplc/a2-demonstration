@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { ApiError, api } from "./api";
 import type { Station, StationIncident, ChargerFault } from "@/types/station";
 
 export const stationsService = {
@@ -18,10 +18,18 @@ export const stationsService = {
     return data.stationConfig;
   },
   listIncidents: async (stationId: number) => {
-    const { data } = await api.get<{ incidents: StationIncident[] }>(
-      `/stations/${stationId}/incidents`
-    );
-    return data.incidents;
+    try {
+      const { data } = await api.get<{ incidents: StationIncident[] }>(
+        `/stations/${stationId}/incidents`
+      );
+      return data.incidents;
+    } catch (error) {
+      // Demo-friendly fallback: if role scoping blocks this station or user is unauthorized, keep dashboard usable.
+      if (error instanceof ApiError && (error.status === 403 || error.status === 401)) {
+        return [];
+      }
+      throw error;
+    }
   },
   createIncident: async (stationId: number, payload: Omit<StationIncident, "id" | "stationId" | "reportedAt">) => {
     const { data } = await api.post<{ incident: StationIncident }>(
@@ -31,10 +39,18 @@ export const stationsService = {
     return data.incident;
   },
   listChargerFaults: async (stationId: number) => {
-    const { data } = await api.get<{ chargerFaults: ChargerFault[] }>(
-      `/stations/${stationId}/charger-faults`
-    );
-    return data.chargerFaults;
+    try {
+      const { data } = await api.get<{ chargerFaults: ChargerFault[] }>(
+        `/stations/${stationId}/charger-faults`
+      );
+      return data.chargerFaults;
+    } catch (error) {
+      // Demo-friendly fallback: if role scoping blocks this station or user is unauthorized, keep dashboard usable.
+      if (error instanceof ApiError && (error.status === 403 || error.status === 401)) {
+        return [];
+      }
+      throw error;
+    }
   },
   createChargerFault: async (
     stationId: number,

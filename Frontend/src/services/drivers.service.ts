@@ -41,6 +41,20 @@ export const driversService = {
     );
     return data.driver;
   },
+  attachTruckMe: async (payload: { code: string }) => {
+    const { data } = await api.post<{ driver: Driver } & { truck: { id: number; plateNumber: string } | null }>(
+      "/drivers/me/attach-truck",
+      payload
+    );
+    return data;
+  },
+  detachTruckMe: async () => {
+    const { data } = await api.post<{ driver: Driver } & { truck: { id: number; plateNumber: string } | null }>(
+      "/drivers/me/detach-truck",
+      {}
+    );
+    return data;
+  },
   arriveStation: async (
     id: number,
     payload: { stationId: number; truckId: number }

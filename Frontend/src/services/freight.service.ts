@@ -4,7 +4,11 @@ import type { Shipment } from "@/types/shipment";
 export const freightService = {
   request: async (payload: {
     pickupLocation: string;
+    pickupLat: number;
+    pickupLng: number;
     deliveryLocation: string;
+    deliveryLat: number;
+    deliveryLng: number;
     cargoDescription: string;
     weight: number;
     volume: number;

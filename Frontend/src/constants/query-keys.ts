@@ -51,12 +51,16 @@ export const queryKeys = {
   },
   dashboard: {
     a2: ["dashboard", "a2"] as const,
+    a2Charts: ["dashboard", "a2", "charts"] as const,
     station: (id: number) => ["dashboard", "station", id] as const,
     fleet: (id: number) => ["dashboard", "fleet", id] as const,
+    fleetEnergyByTruck: (fleetId: number) =>
+      ["dashboard", "fleet", fleetId, "energy-by-truck"] as const,
     driver: (id: number) => ["dashboard", "driver", id] as const,
-    eeu: ["dashboard", "eeu"] as const,
-    freight: (customerId: number) =>
-      ["dashboard", "freight", customerId] as const,
+    eeu: (timeframe?: "daily" | "monthly" | "yearly") =>
+      ["dashboard", "eeu", timeframe ?? "daily"] as const,
+    freight: (customerId: number, timeframe?: "daily" | "monthly" | "yearly") =>
+      ["dashboard", "freight", customerId, timeframe ?? "daily"] as const,
     liveFeed: ["dashboard", "a2", "live-feed"] as const,
   },
   simulation: {

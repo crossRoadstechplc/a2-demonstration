@@ -25,7 +25,7 @@ export function ChartCard({
         </div>
         {action}
       </div>
-      <div className="mt-4 h-[220px] rounded-xl border border-border-subtle bg-background-muted p-3">
+      <div className="mt-4 h-[220px] overflow-hidden rounded-xl border border-border-subtle bg-background-muted p-3">
         {children ?? (
           <div className="flex h-full items-end gap-2">
             {Array.from({ length: 14 }).map((_, index) => (

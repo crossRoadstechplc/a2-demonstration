@@ -10,12 +10,16 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { AsyncActionButton } from "@/components/ui/async-action-button";
 import { LiveRefreshIndicator } from "@/components/ui/live-refresh-indicator";
 import { appQueries } from "@/hooks/queries/use-app-data";
+import { useAuth } from "@/hooks/use-auth";
 import { useSmartPolling } from "@/hooks/use-live-updates";
 import { useUiStore } from "@/store/ui-store";
 
+import { BatteryChargingVisualization } from "./components/battery-charging-visualization";
+import { StationActivityMap } from "./components/station-activity-map";
 import { StationDataGrids } from "./components/station-data-grids";
 import { StationKpiGrid } from "./components/station-kpi-grid";
 import { StationOverviewCard } from "./components/station-overview-card";
+import { SwapPaymentNotifications } from "./components/swap-payment-notifications";
 import {
   deriveChargerStatuses,
   deriveIncomingPredictions,
@@ -27,6 +31,11 @@ import {
 import { StationDashboardSkeleton } from "./station-dashboard-skeleton";
 
 export function StationDashboard() {
+  const { role, user } = useAuth();
+  // STATION_OPERATOR users are locked to their own station (organizationId = stationId)
+  const isStationLocked = role === "STATION_OPERATOR";
+  const lockedStationId = isStationLocked && user?.organizationId ? Number(user.organizationId) : null;
+
   const [preferredStationId, setPreferredStationId] = useState<number>(1);
   const [batteryStatusFilter, setBatteryStatusFilter] = useState("ALL");
   const [chargerStatusFilter, setChargerStatusFilter] = useState("ALL");
@@ -40,14 +49,16 @@ export function StationDashboard() {
 
   const selectedStationId = useMemo(() => {
     const stations = stationsQuery.data ?? [];
-    if (!stations.length) {
-      return preferredStationId;
+    if (!stations.length) return 0;
+    // Locked role: always use their assigned station
+    if (lockedStationId !== null) {
+      return stations.some((s) => s.id === lockedStationId) ? lockedStationId : (stations[0]?.id ?? 0);
     }
     if (stations.some((station) => station.id === preferredStationId)) {
       return preferredStationId;
     }
-    return stations[0].id;
-  }, [stationsQuery.data, preferredStationId]);
+    return stations[0]?.id ?? 0;
+  }, [stationsQuery.data, preferredStationId, lockedStationId]);
 
   const stationSummaryQuery = appQueries.useStationSummary(selectedStationId);
   const incidentsQuery = appQueries.useStationIncidents(selectedStationId);
@@ -218,7 +229,8 @@ export function StationDashboard() {
         <select
           value={selectedStationId}
           onChange={(event) => setPreferredStationId(Number(event.target.value))}
-          className="h-10 rounded-xl border border-border-subtle bg-background-muted px-3 text-sm text-foreground"
+          disabled={isStationLocked}
+          className="h-10 rounded-xl border border-border-subtle bg-background-muted px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
         >
           {filteredStations.map((stationItem) => (
             <option key={stationItem.id} value={stationItem.id}>
@@ -253,7 +265,32 @@ export function StationDashboard() {
 
       <StationKpiGrid kpis={kpis} />
 
-      <StationOverviewCard station={station} />
+      <StationOverviewCard
+        station={station}
+        stations={stationsQuery.data}
+        trucks={trucksQuery.data}
+        batteries={batteriesQuery.data}
+      />
+
+      <BatteryChargingVisualization batteries={stationBatteries} />
+
+      <SwapPaymentNotifications swaps={stationSwaps} stationId={selectedStationId} />
+
+      <StationActivityMap
+        trucksAtStation={trucksAtStation}
+        batteries={stationBatteries}
+        chargerStatus={
+          (stationSummaryQuery.data as { chargerStatus?: Array<{ chargerId: string; status: string; outputKw: number; batteryId: number | null; energyAddedKwh: number }> })?.chargerStatus ?? chargerRows.map((row) => ({
+            chargerId: row.chargerId,
+            status: row.status,
+            outputKw: row.outputKw,
+            batteryId: null,
+            energyAddedKwh: 0,
+          }))
+        }
+        swaps={stationSwaps}
+        roomTemperature={28}
+      />
 
       <StationDataGrids
         batteries={stationBatteries}

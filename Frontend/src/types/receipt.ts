@@ -8,5 +8,7 @@ export interface Receipt {
   total: number;
   eeuShare: number;
   a2Share: number;
+  paymentMethod?: string;
+  status?: "PENDING" | "PAID";
   timestamp: string;
 }

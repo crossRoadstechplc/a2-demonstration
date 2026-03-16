@@ -75,17 +75,21 @@ export function deriveFleetKpis(params: {
     (truck) => truck.truckType === "REFRIGERATED" && truck.status.toUpperCase() !== "IDLE"
   ).length;
 
-  const summaryRows = Array.isArray((billingSummaryFleets as Record<string, unknown> | undefined)?.fleets)
-    ? (((billingSummaryFleets as Record<string, unknown>).fleets as unknown[]) ?? [])
-    : [];
+  // Backend returns { revenueByFleet: [...] } with totalRevenueEtb field
+  const summaryRows = Array.isArray((billingSummaryFleets as Record<string, unknown> | undefined)?.revenueByFleet)
+    ? (((billingSummaryFleets as Record<string, unknown>).revenueByFleet as unknown[]) ?? [])
+    : Array.isArray((billingSummaryFleets as Record<string, unknown> | undefined)?.fleets)
+      ? (((billingSummaryFleets as Record<string, unknown>).fleets as unknown[]) ?? [])
+      : [];
   const matchedSummaryRow = summaryRows.find((row) => {
     const fleetId = readNumber(row, ["fleetId", "id"]);
     return fleetId === selectedFleetId;
   });
 
+  // totalRevenueEtb is the total cost the fleet pays (energy + service + VAT)
   const fleetEnergyCostEtb =
-    readNumber(matchedSummaryRow, ["energyCostEtb", "totalEnergyCost", "energyCost"]) ||
-    readNumber(billingSummaryFleets, ["energyCostEtb", "totalEnergyCost", "energyCost"]);
+    readNumber(matchedSummaryRow, ["totalRevenueEtb", "energyCostEtb", "totalEnergyCost", "energyCost"]) ||
+    readNumber(billingSummaryFleets, ["totalRevenueEtb", "energyCostEtb", "totalEnergyCost", "energyCost"]);
 
   return {
     activeTrucks,

@@ -73,6 +73,12 @@ export const appQueries = {
       queryFn: dashboardService.liveFeed,
       staleTime: 20_000,
     }),
+  useA2Charts: () =>
+    useAppQuery({
+      queryKey: queryKeys.dashboard.a2Charts,
+      queryFn: dashboardService.a2Charts,
+      staleTime: 15_000,
+    }),
   useBillingSummaryA2: () =>
     useAppQuery({
       queryKey: queryKeys.billing.summaryA2,
@@ -91,45 +97,56 @@ export const appQueries = {
       queryFn: billingService.summaryFleets,
       staleTime: 30_000,
     }),
-  useBillingSummaryEeu: () =>
+  useBillingSummaryEeu: (timeframe: "daily" | "monthly" | "yearly" = "daily") =>
     useAppQuery({
-      queryKey: queryKeys.billing.summaryEeu,
-      queryFn: billingService.summaryEeu,
+      queryKey: [...queryKeys.billing.summaryEeu, timeframe],
+      queryFn: () => billingService.summaryEeu(timeframe),
       staleTime: 30_000,
     }),
   useFleetSummary: (fleetId: number) =>
     useAppQuery({
       queryKey: queryKeys.dashboard.fleet(fleetId),
       queryFn: () => dashboardService.fleet(fleetId),
-      enabled: Boolean(fleetId),
+      enabled: Boolean(fleetId) && fleetId > 0,
     }),
-  useFreightSummary: (customerId: number) =>
+  useFleetEnergyByTruck: (fleetId: number) =>
     useAppQuery({
-      queryKey: queryKeys.dashboard.freight(customerId),
-      queryFn: () => dashboardService.freight(customerId),
-      enabled: Boolean(customerId),
+      queryKey: queryKeys.dashboard.fleetEnergyByTruck(fleetId),
+      queryFn: () => dashboardService.fleetEnergyByTruck(fleetId),
+      enabled: Boolean(fleetId) && fleetId > 0,
+      staleTime: 15_000,
+    }),
+  useFreightSummary: (customerId: number, timeframe: "daily" | "monthly" | "yearly" = "daily") =>
+    useAppQuery({
+      queryKey: queryKeys.dashboard.freight(customerId, timeframe),
+      queryFn: () => dashboardService.freight(customerId, timeframe),
+      enabled: Boolean(customerId) && customerId > 0,
       staleTime: 20_000,
     }),
   useStationSummary: (stationId: number) =>
     useAppQuery({
       queryKey: queryKeys.dashboard.station(stationId),
       queryFn: () => dashboardService.station(stationId),
+      enabled: stationId > 0,
     }),
   useStationIncidents: (stationId: number) =>
     useAppQuery({
       queryKey: queryKeys.stations.incidents(stationId),
       queryFn: () => stationsService.listIncidents(stationId),
+      enabled: stationId > 0,
     }),
   useStationChargerFaults: (stationId: number) =>
     useAppQuery({
       queryKey: queryKeys.stations.chargerFaults(stationId),
       queryFn: () => stationsService.listChargerFaults(stationId),
+      enabled: stationId > 0,
     }),
   useChargingByStation: (stationId: number) =>
     useAppQuery({
       queryKey: queryKeys.charging.station(stationId),
       queryFn: () => chargingService.listByStation(stationId),
       staleTime: 20_000,
+      enabled: stationId > 0,
     }),
   useTariffConfig: () =>
     useAppQuery({

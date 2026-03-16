@@ -1,11 +1,22 @@
 import { StatusBadge } from "@/components/ui/status-badge";
+import { OperationsCorridorMap } from "@/components/dashboard/operations-corridor-map";
+import type { Battery } from "@/types/battery";
 import type { Station } from "@/types/station";
+import type { Truck } from "@/types/truck";
 
 interface StationOverviewCardProps {
   station?: Station;
+  stations?: Station[];
+  trucks?: Truck[];
+  batteries?: Battery[];
 }
 
-export function StationOverviewCard({ station }: StationOverviewCardProps) {
+export function StationOverviewCard({
+  station,
+  stations,
+  trucks,
+  batteries,
+}: StationOverviewCardProps) {
   return (
     <article className="panel card-regular">
       <div className="mb-3 flex items-center justify-between">
@@ -32,6 +43,14 @@ export function StationOverviewCard({ station }: StationOverviewCardProps) {
           <p className="text-xs uppercase">Operating Status</p>
           <p className="mt-1 text-foreground">{station?.operatingStatus ?? station?.status ?? "N/A"}</p>
         </div>
+      </div>
+      <div className="mt-3 h-64">
+        <OperationsCorridorMap
+          stations={stations}
+          trucks={trucks}
+          batteries={batteries}
+          highlightedStationId={station?.id ?? null}
+        />
       </div>
     </article>
   );

@@ -1,7 +1,11 @@
 export interface Shipment {
   id: number;
   pickupLocation: string;
+  pickupLat: number | null;
+  pickupLng: number | null;
   deliveryLocation: string;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
   cargoDescription: string;
   weight: number;
   volume: number;

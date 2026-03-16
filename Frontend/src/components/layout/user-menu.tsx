@@ -18,25 +18,18 @@ export function UserMenu() {
   }, [user?.name]);
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-background-elevated px-3 py-2">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-accent/30 bg-accent/10 text-xs font-semibold text-accent">
+    <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-background-elevated px-4 py-3">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-accent/40 bg-accent/15 text-sm font-bold text-accent">
         {initials}
       </div>
-      <div className="hidden min-w-0 sm:block">
-        <p className="truncate text-sm font-medium text-foreground">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-foreground">
           {user?.name ?? "Operator"}
         </p>
         <p className="truncate text-xs text-foreground-muted">
           {role ? ROLE_DISPLAY_NAME[role] : "Unassigned"}
         </p>
       </div>
-      <button
-        type="button"
-        className="rounded-lg border border-border-subtle px-2 py-1 text-xs text-foreground-muted transition hover:border-accent hover:text-accent"
-        onClick={logout}
-      >
-        Logout
-      </button>
     </div>
   );
 }
