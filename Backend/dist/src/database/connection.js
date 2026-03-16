@@ -255,6 +255,19 @@ async function createChargingSessionsTable() {
     );
   `);
 }
+async function ensureChargingSessionsColumns() {
+    const columns = await allQuery("PRAGMA table_info(charging_sessions);");
+    const columnNames = new Set(columns.map((column) => column.name));
+    if (!columnNames.has("startSoc")) {
+        await runQuery("ALTER TABLE charging_sessions ADD COLUMN startSoc REAL;");
+    }
+    if (!columnNames.has("currentSoc")) {
+        await runQuery("ALTER TABLE charging_sessions ADD COLUMN currentSoc REAL;");
+    }
+    if (!columnNames.has("targetSoc")) {
+        await runQuery("ALTER TABLE charging_sessions ADD COLUMN targetSoc REAL DEFAULT 95;");
+    }
+}
 async function createReceiptsTable() {
     await runQuery(`
     CREATE TABLE IF NOT EXISTS receipts (
@@ -267,10 +280,21 @@ async function createReceiptsTable() {
       total REAL NOT NULL,
       eeuShare REAL NOT NULL,
       a2Share REAL NOT NULL,
+      paymentMethod TEXT NOT NULL DEFAULT 'CBE',
       timestamp TEXT NOT NULL,
       FOREIGN KEY (swapId) REFERENCES swap_transactions(id) ON DELETE CASCADE
     );
   `);
+}
+async function ensureReceiptColumns() {
+    const columns = await allQuery("PRAGMA table_info(receipts);");
+    const columnNames = new Set(columns.map((column) => column.name));
+    if (!columnNames.has("paymentMethod")) {
+        await runQuery("ALTER TABLE receipts ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT 'CBE';");
+    }
+    if (!columnNames.has("status")) {
+        await runQuery("ALTER TABLE receipts ADD COLUMN status TEXT NOT NULL DEFAULT 'PENDING';");
+    }
 }
 async function createDriverTelemetryTable() {
     await runQuery(`
@@ -289,7 +313,11 @@ async function createShipmentsTable() {
     CREATE TABLE IF NOT EXISTS shipments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pickupLocation TEXT NOT NULL,
+      pickupLat REAL,
+      pickupLng REAL,
       deliveryLocation TEXT NOT NULL,
+      deliveryLat REAL,
+      deliveryLng REAL,
       cargoDescription TEXT NOT NULL,
       weight REAL NOT NULL,
       volume REAL NOT NULL,
@@ -328,6 +356,12 @@ async function ensureStationColumns() {
     if (!columnNames.has("operatingStatus")) {
         await runQuery("ALTER TABLE stations ADD COLUMN operatingStatus TEXT NOT NULL DEFAULT 'ACTIVE';");
     }
+    if (!columnNames.has("locationLat")) {
+        await runQuery("ALTER TABLE stations ADD COLUMN locationLat REAL;");
+    }
+    if (!columnNames.has("locationLng")) {
+        await runQuery("ALTER TABLE stations ADD COLUMN locationLng REAL;");
+    }
 }
 async function ensureShipmentColumns() {
     const columns = await allQuery("PRAGMA table_info(shipments);");
@@ -358,6 +392,18 @@ async function ensureShipmentColumns() {
     }
     if (!columnNames.has("deliveryConfirmedAt")) {
         await runQuery("ALTER TABLE shipments ADD COLUMN deliveryConfirmedAt TEXT;");
+    }
+    if (!columnNames.has("pickupLat")) {
+        await runQuery("ALTER TABLE shipments ADD COLUMN pickupLat REAL;");
+    }
+    if (!columnNames.has("pickupLng")) {
+        await runQuery("ALTER TABLE shipments ADD COLUMN pickupLng REAL;");
+    }
+    if (!columnNames.has("deliveryLat")) {
+        await runQuery("ALTER TABLE shipments ADD COLUMN deliveryLat REAL;");
+    }
+    if (!columnNames.has("deliveryLng")) {
+        await runQuery("ALTER TABLE shipments ADD COLUMN deliveryLng REAL;");
     }
 }
 async function createTariffConfigTable() {
@@ -402,6 +448,13 @@ async function createStationIncidentsTable() {
     );
   `);
 }
+async function ensureStationIncidentsColumns() {
+    const columns = await allQuery("PRAGMA table_info(station_incidents);");
+    const columnNames = new Set(columns.map((column) => column.name));
+    if (!columnNames.has("resolvedAt")) {
+        await runQuery("ALTER TABLE station_incidents ADD COLUMN resolvedAt TEXT;");
+    }
+}
 async function createChargerFaultsTable() {
     await runQuery(`
     CREATE TABLE IF NOT EXISTS charger_faults (
@@ -413,6 +466,21 @@ async function createChargerFaultsTable() {
       status TEXT NOT NULL,
       reportedAt TEXT NOT NULL,
       resolvedAt TEXT,
+      FOREIGN KEY (stationId) REFERENCES stations(id) ON DELETE CASCADE
+    );
+  `);
+}
+async function createSwapQueueTable() {
+    await runQuery(`
+    CREATE TABLE IF NOT EXISTS swap_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      truckId INTEGER NOT NULL,
+      stationId INTEGER NOT NULL,
+      bookedAt TEXT NOT NULL,
+      estimatedArrival TEXT NOT NULL,
+      distanceKm REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      FOREIGN KEY (truckId) REFERENCES trucks(id) ON DELETE CASCADE,
       FOREIGN KEY (stationId) REFERENCES stations(id) ON DELETE CASCADE
     );
   `);
@@ -455,6 +523,18 @@ async function createBatteryEventsTable() {
     );
   `);
 }
+async function createDemoScenariosTable() {
+    await runQuery(`
+    CREATE TABLE IF NOT EXISTS demo_scenarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scenarioName TEXT NOT NULL UNIQUE,
+      isActive INTEGER NOT NULL DEFAULT 0,
+      activatedAt TEXT,
+      parameters TEXT,
+      createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+}
 async function initializeDatabase() {
     await new Promise((resolve, reject) => {
         const db = getDb();
@@ -481,15 +561,20 @@ async function initializeDatabase() {
     await createBatteriesTable();
     await createSwapTransactionsTable();
     await createChargingSessionsTable();
+    await ensureChargingSessionsColumns();
     await createReceiptsTable();
+    await ensureReceiptColumns();
     await createDriverTelemetryTable();
     await createShipmentsTable();
     await ensureShipmentColumns();
     await createTariffConfigTable();
     await createChargingWindowConfigTable();
     await createStationIncidentsTable();
+    await ensureStationIncidentsColumns();
     await createChargerFaultsTable();
+    await createSwapQueueTable();
     await createShipmentEventsTable();
     await createTruckArrivalEventsTable();
     await createBatteryEventsTable();
+    await createDemoScenariosTable();
 }

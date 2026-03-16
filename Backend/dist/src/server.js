@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const app_1 = __importDefault(require("./app"));
 const connection_1 = require("./database/connection");
 const logger_1 = require("./utils/logger");
-const PORT = Number(process.env.PORT ?? 3000);
+const PORT = 3049;
 let httpServer = null;
 async function startServer() {
     try {

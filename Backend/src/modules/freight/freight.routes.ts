@@ -8,7 +8,11 @@ import { getOrganizationIdAsNumber, isAdminOrA2OrFleetOwner } from "../../utils/
 interface Shipment {
   id: number;
   pickupLocation: string;
+  pickupLat: number | null;
+  pickupLng: number | null;
   deliveryLocation: string;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
   cargoDescription: string;
   weight: number;
   volume: number;
@@ -34,6 +38,8 @@ interface CandidateTruck {
   region: string;
   truckType: string;
   availability: string;
+  locationLat: number | null;
+  locationLng: number | null;
 }
 
 interface CandidateDriver {
@@ -42,7 +48,34 @@ interface CandidateDriver {
   status: string;
 }
 
-function locationScore(pickupLocation: string, region: string): number {
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function locationScore(
+  pickupLocation: string,
+  region: string,
+  pickupLat: number | null,
+  pickupLng: number | null,
+  truckLat: number | null,
+  truckLng: number | null
+): number {
+  // If coordinates are available, use distance-based scoring
+  if (pickupLat !== null && pickupLng !== null && truckLat !== null && truckLng !== null) {
+    const distance = haversineDistance(pickupLat, pickupLng, truckLat, truckLng);
+    return distance; // Lower is better
+  }
+  // Fallback to text-based matching
   const pickup = pickupLocation.trim().toLowerCase();
   const fleetRegion = region.trim().toLowerCase();
   if (pickup === fleetRegion) {
@@ -52,6 +85,79 @@ function locationScore(pickupLocation: string, region: string): number {
     return 1;
   }
   return 2;
+}
+
+async function assignTruckAndDriverToShipment(
+  shipment: {
+    pickupLocation: string;
+    pickupLat: number | null;
+    pickupLng: number | null;
+    requiresRefrigeration: number;
+  }
+): Promise<{ truckId: number; driverId: number } | null> {
+  const candidateTrucks = await allQuery<CandidateTruck>(
+    `
+      SELECT t.id, t.fleetId, t.currentSoc, t.status, f.region, t.truckType, t.availability, t.locationLat, t.locationLng
+      FROM trucks t
+      INNER JOIN fleets f ON f.id = t.fleetId
+      WHERE t.status = 'READY' AND t.availability = 'AVAILABLE';
+    `
+  );
+  if (candidateTrucks.length === 0) {
+    return null;
+  }
+
+  const eligibleTrucks = shipment.requiresRefrigeration
+    ? candidateTrucks.filter((truck) => truck.truckType === "REFRIGERATED")
+    : candidateTrucks;
+  if (eligibleTrucks.length === 0) {
+    return null;
+  }
+
+  const selectedTruck = eligibleTrucks
+    .slice()
+    .sort((a, b) => {
+      const scoreA = locationScore(
+        shipment.pickupLocation,
+        a.region,
+        shipment.pickupLat,
+        shipment.pickupLng,
+        a.locationLat,
+        a.locationLng
+      );
+      const scoreB = locationScore(
+        shipment.pickupLocation,
+        b.region,
+        shipment.pickupLat,
+        shipment.pickupLng,
+        b.locationLat,
+        b.locationLng
+      );
+      if (Math.abs(scoreA - scoreB) > 0.1) {
+        return scoreA - scoreB; // Prefer closer truck
+      }
+      return b.currentSoc - a.currentSoc; // Then prefer higher SOC
+    })[0];
+
+  // Get top 10 available drivers by rating, then randomly select one for diversity
+  const candidateDrivers = await allQuery<CandidateDriver>(
+    `
+      SELECT id, fleetId, status
+      FROM drivers
+      WHERE fleetId = ? AND status = 'AVAILABLE'
+      ORDER BY overallRating DESC, id ASC
+      LIMIT 10;
+    `,
+    [selectedTruck.fleetId]
+  );
+  if (candidateDrivers.length === 0) {
+    return null;
+  }
+
+  // Randomly select from top candidates to ensure driver diversity
+  const selectedDriver = candidateDrivers[Math.floor(Math.random() * candidateDrivers.length)];
+
+  return { truckId: selectedTruck.id, driverId: selectedDriver.id };
 }
 
 const freightRouter = Router();
@@ -74,7 +180,11 @@ freightRouter.post("/freight/request", async (req, res, next) => {
   try {
     const {
       pickupLocation,
+      pickupLat,
+      pickupLng,
       deliveryLocation,
+      deliveryLat,
+      deliveryLng,
       cargoDescription,
       weight,
       volume,
@@ -83,7 +193,11 @@ freightRouter.post("/freight/request", async (req, res, next) => {
       temperatureTarget
     } = req.body as {
       pickupLocation?: string;
+      pickupLat?: number;
+      pickupLng?: number;
       deliveryLocation?: string;
+      deliveryLat?: number;
+      deliveryLng?: number;
       cargoDescription?: string;
       weight?: number;
       volume?: number;
@@ -98,35 +212,101 @@ freightRouter.post("/freight/request", async (req, res, next) => {
       !cargoDescription ||
       weight === undefined ||
       volume === undefined ||
-      !pickupWindow
+      !pickupWindow ||
+      pickupLat === undefined ||
+      pickupLng === undefined ||
+      deliveryLat === undefined ||
+      deliveryLng === undefined
     ) {
       res.status(400).json({
         error:
-          "pickupLocation, deliveryLocation, cargoDescription, weight, volume and pickupWindow are required"
+          "pickupLocation, pickupLat, pickupLng, deliveryLocation, deliveryLat, deliveryLng, cargoDescription, weight, volume and pickupWindow are required"
       });
       return;
     }
 
+    // Validate coordinates are within corridor bounds
+    if (
+      pickupLat < 8.5 ||
+      pickupLat > 12.0 ||
+      pickupLng < 38.5 ||
+      pickupLng > 43.5 ||
+      deliveryLat < 8.5 ||
+      deliveryLat > 12.0 ||
+      deliveryLng < 38.5 ||
+      deliveryLng > 43.5
+    ) {
+      res.status(400).json({
+        error: "Pickup and delivery coordinates must be within the A2 corridor bounds"
+      });
+      return;
+    }
+
+    // Validate minimum distance
+    const distance = haversineDistance(pickupLat, pickupLng, deliveryLat, deliveryLng);
+    if (distance < 1) {
+      res.status(400).json({
+        error: "Delivery must be at least 1 km away from pickup location"
+      });
+      return;
+    }
+
+    // Attempt immediate assignment
+    const assignment = await assignTruckAndDriverToShipment({
+      pickupLocation,
+      pickupLat,
+      pickupLng,
+      requiresRefrigeration: requiresRefrigeration ? 1 : 0,
+    });
+
+    if (!assignment) {
+      res.status(409).json({
+        error: "No eligible truck and driver available for immediate assignment. Please try again later."
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
     const result = await runQuery(
       `
       INSERT INTO shipments
-      (pickupLocation, deliveryLocation, cargoDescription, weight, volume, pickupWindow, requiresRefrigeration, temperatureTarget, customerId, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'REQUESTED');
+      (pickupLocation, pickupLat, pickupLng, deliveryLocation, deliveryLat, deliveryLng, cargoDescription, weight, volume, pickupWindow, requiresRefrigeration, temperatureTarget, customerId, truckId, driverId, status, assignedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ASSIGNED', ?);
     `,
       [
         pickupLocation,
+        pickupLat,
+        pickupLng,
         deliveryLocation,
+        deliveryLat,
+        deliveryLng,
         cargoDescription,
         weight,
         volume,
         pickupWindow,
         requiresRefrigeration ? 1 : 0,
         temperatureTarget ?? null,
-        req.user?.role === "FREIGHT_CUSTOMER" ? req.user.id : null
+        req.user?.role === "FREIGHT_CUSTOMER" ? req.user.id : null,
+        assignment.truckId,
+        assignment.driverId,
+        timestamp
       ]
     );
 
+    // Update truck and driver status
+    await runQuery("UPDATE trucks SET status = 'IN_TRANSIT', assignedDriverId = ? WHERE id = ?;", [
+      assignment.driverId,
+      assignment.truckId
+    ]);
+    await runQuery("UPDATE drivers SET status = 'ON_DUTY' WHERE id = ?;", [assignment.driverId]);
+
     await addShipmentEvent(result.lastID, "REQUESTED", "Shipment request created");
+    await addShipmentEvent(
+      result.lastID,
+      "ASSIGNED",
+      `Assigned truck ${assignment.truckId} and driver ${assignment.driverId}`
+    );
+
     const shipment = await getQuery<Shipment>("SELECT * FROM shipments WHERE id = ?;", [
       result.lastID
     ]);
@@ -163,7 +343,7 @@ freightRouter.post("/freight/:id/assign", async (req, res, next) => {
 
     const candidateTrucks = await allQuery<CandidateTruck>(
       `
-      SELECT t.id, t.fleetId, t.currentSoc, t.status, f.region, t.truckType, t.availability
+      SELECT t.id, t.fleetId, t.currentSoc, t.status, f.region, t.truckType, t.availability, t.locationLat, t.locationLng
       FROM trucks t
       INNER JOIN fleets f ON f.id = t.fleetId
       WHERE t.status = 'READY' AND t.availability = 'AVAILABLE';
@@ -182,31 +362,58 @@ freightRouter.post("/freight/:id/assign", async (req, res, next) => {
       return;
     }
 
+    const shipmentData = await getQuery<{
+      pickupLocation: string;
+      pickupLat: number | null;
+      pickupLng: number | null;
+      requiresRefrigeration: number;
+    }>("SELECT pickupLocation, pickupLat, pickupLng, requiresRefrigeration FROM shipments WHERE id = ?;", [
+      shipmentId
+    ]);
+
     const selectedTruck = eligibleTrucks
       .slice()
       .sort((a, b) => {
-        const scoreA = locationScore(shipment.pickupLocation, a.region);
-        const scoreB = locationScore(shipment.pickupLocation, b.region);
-        if (scoreA !== scoreB) {
+        const scoreA = locationScore(
+          shipmentData?.pickupLocation ?? shipment.pickupLocation,
+          a.region,
+          shipmentData?.pickupLat ?? null,
+          shipmentData?.pickupLng ?? null,
+          a.locationLat,
+          a.locationLng
+        );
+        const scoreB = locationScore(
+          shipmentData?.pickupLocation ?? shipment.pickupLocation,
+          b.region,
+          shipmentData?.pickupLat ?? null,
+          shipmentData?.pickupLng ?? null,
+          b.locationLat,
+          b.locationLng
+        );
+        if (Math.abs(scoreA - scoreB) > 0.1) {
           return scoreA - scoreB;
         }
         return b.currentSoc - a.currentSoc;
       })[0];
 
-    const selectedDriver = await getQuery<CandidateDriver>(
+    // Get top 10 available drivers by rating, then randomly select one for diversity
+    const candidateDrivers = await allQuery<CandidateDriver>(
       `
       SELECT id, fleetId, status
       FROM drivers
       WHERE fleetId = ? AND status = 'AVAILABLE'
       ORDER BY overallRating DESC, id ASC
-      LIMIT 1;
+      LIMIT 10;
     `,
       [selectedTruck.fleetId]
     );
-    if (!selectedDriver) {
+    if (candidateDrivers.length === 0) {
       res.status(400).json({ error: "No available driver for selected truck fleet" });
       return;
     }
+
+    // Randomly select from top candidates to ensure driver diversity
+    const selectedDriver = candidateDrivers[Math.floor(Math.random() * candidateDrivers.length)];
 
     await runQuery(
       `

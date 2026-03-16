@@ -416,10 +416,28 @@ Returns:
 ### GET `/dashboard/station/:id`
 Station-level metrics:
 
-- `batteriesAtStation`
-- `activeChargingSessions`
-- `swapsToday`
-- `energyToday`
+**Top KPIs:**
+- `batteriesAtStation` - Total batteries at station
+- `readyBatteries` - Count of READY batteries
+- `chargingBatteries` - Count of CHARGING batteries
+- `activeChargingSessions` - Count of active charging sessions
+- `swapsToday` - Swaps performed today
+- `energyToday` - Energy consumed today (kWh)
+- `energyChargingNowKwh` - Current power draw from charging (kW)
+- `revenueTodayEtb` - Revenue today (ETB)
+- `revenueThisMonthEtb` - Revenue this month (ETB)
+- `chargerFaultsOpen` - Count of open charger faults
+- `queueSize` - Current queue size
+
+**Operational Data:**
+- `batteryInventoryByStatus` - Breakdown by status (READY, CHARGING, MAINTENANCE, IN_TRUCK)
+- `batteriesReadyForSwap` - List of READY batteries with SOC >= 80%
+- `activeChargingSessionsList` - Full list of active sessions with progress details
+- `recentCompletedChargingSessions` - Last 10 completed charging sessions
+- `recentSwaps` - Last 10 swap transactions
+- `trucksCurrentlyAtStation` - List of trucks currently at station
+- `chargerStatus` - Charger status array with active/ready states
+- `incomingPredictions` - Incoming truck predictions with ETA and estimated SOC
 
 ### GET `/dashboard/fleet/:id`
 Fleet-level metrics:
@@ -458,14 +476,41 @@ Starts background simulation loop.
 
 Behavior:
 
-- runs every 30 seconds
+- runs every 10 seconds
 - moves trucks between stations
-- reduces battery SOC
-- triggers swaps when SOC < 20%
-- creates/advances overnight charging sessions
+- reduces battery SOC (enforced 25% minimum floor)
+- triggers swaps when SOC < 35% (always) or SOC < 45% (70% chance)
+- creates/advances charging sessions
+- **Warm-start**: Demo begins with operational state (batteries charging, trucks present, recent swaps)
 
 ### POST `/simulation/stop`
 Stops the background simulation loop.
+
+### Simulation Behavior
+
+**Warm-Start State:**
+- Demo seeds with 1000 trucks, 1000 drivers, and realistic battery inventory
+- Stations begin with operational state:
+  - 45% READY batteries (SOC 80-95%)
+  - 35% CHARGING batteries (SOC 25-80%) with active charging sessions
+  - 15% IN_TRUCK batteries (assigned to trucks)
+  - 5% MAINTENANCE batteries
+- Historical data seeded: 50-100 swaps today, 20-30 completed charging sessions
+- Some trucks positioned at stations (not all in transit)
+
+**25% SOC Minimum Floor:**
+- No battery may go below 25% SOC anywhere in the simulation
+- Movement phase enforces floor during transit
+- Station operations phase clamps arrival SOC to minimum 25%
+- Swap trigger logic uses 35% threshold to ensure trucks swap before hitting floor
+- All seeded batteries have SOC >= 25%
+
+**Charging Capacity:**
+- Scaled for 1000 trucks:
+  - Small stations (capacity ≤18): max 50 chargers
+  - Medium stations (capacity 19-25): max 100 chargers
+  - Large stations (capacity >25): max 150 chargers
+- Charger count calculated as: 1 per 3.5 batteries, min 10, max based on station size
 
 ---
 
@@ -791,6 +836,13 @@ This section documents newly added operational endpoints and extended workflows.
 #### POST `/demo/seed`
 - **Roles:** `ADMIN`, `A2_OPERATOR`
 - **Purpose:** run demo data seeder.
+- **Seeds:**
+  - 10 fleets
+  - 1000 trucks (scaled from 200)
+  - 1000 drivers
+  - 7 stations
+  - Realistic battery inventory with warm-start operational state
+  - Historical swaps and charging sessions for today
 
 #### POST `/demo/scenario/:name`
 - **Roles:** `ADMIN`, `A2_OPERATOR`

@@ -9,6 +9,7 @@ import billingRouter from "./modules/billing/billing.routes";
 import chargingRouter from "./modules/charging/charging.routes";
 import corridorRouter from "./modules/corridor/corridor.routes";
 import configRouter from "./modules/config/config.routes";
+import demoRouter from "./modules/demo/demo.routes";
 import dashboardRouter from "./modules/dashboard/dashboard.routes";
 import freightRouter from "./modules/freight/freight.routes";
 import simulationRouter from "./modules/simulation/simulation.routes";
@@ -40,6 +41,7 @@ app.use(freightRouter);
 app.use(dashboardRouter);
 app.use(simulationRouter);
 app.use(configRouter);
+app.use(demoRouter);
 
 app.get("/health", (_req, res) => {
   res.status(200).json({

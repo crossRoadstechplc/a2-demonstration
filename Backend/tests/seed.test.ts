@@ -17,8 +17,8 @@ describe("Seed data", () => {
     const drivers = await getQuery<CountRow>("SELECT COUNT(*) as count FROM drivers;");
     const fleets = await getQuery<CountRow>("SELECT COUNT(*) as count FROM fleets;");
 
-    expect(trucks?.count).toBe(200);
-    expect(drivers?.count).toBe(200);
+    expect(trucks?.count).toBe(1000);
+    expect(drivers?.count).toBe(1000);
     expect(fleets?.count).toBe(10);
   });
 });

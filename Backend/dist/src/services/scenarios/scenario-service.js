@@ -1,0 +1,163 @@
+"use strict";
+/**
+ * Scenario Service
+ *
+ * Manages demo scenario state and provides scenario-specific modifiers
+ * for simulation phases.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.scenarioService = void 0;
+const connection_1 = require("../../database/connection");
+class ScenarioService {
+    constructor() {
+        this.currentScenario = null;
+    }
+    /**
+     * Get current active scenario
+     */
+    async getActiveScenario() {
+        const row = await (0, connection_1.getQuery)("SELECT scenarioName, isActive, activatedAt, parameters FROM demo_scenarios WHERE isActive = 1 LIMIT 1;");
+        if (!row || !row.isActive) {
+            return {
+                scenarioName: null,
+                isActive: false,
+                activatedAt: null,
+                parameters: {},
+            };
+        }
+        return {
+            scenarioName: row.scenarioName,
+            isActive: true,
+            activatedAt: row.activatedAt,
+            parameters: row.parameters ? JSON.parse(row.parameters) : {},
+        };
+    }
+    /**
+     * Activate a scenario
+     */
+    async activateScenario(scenarioName, parameters) {
+        // Deactivate all scenarios first
+        await (0, connection_1.runQuery)("UPDATE demo_scenarios SET isActive = 0;");
+        // Check if scenario exists
+        const existing = await (0, connection_1.getQuery)("SELECT id FROM demo_scenarios WHERE scenarioName = ?;", [scenarioName]);
+        const timestamp = new Date().toISOString();
+        const paramsJson = JSON.stringify(parameters || {});
+        if (existing) {
+            // Update existing scenario
+            await (0, connection_1.runQuery)("UPDATE demo_scenarios SET isActive = 1, activatedAt = ?, parameters = ? WHERE scenarioName = ?;", [timestamp, paramsJson, scenarioName]);
+        }
+        else {
+            // Insert new scenario
+            await (0, connection_1.runQuery)("INSERT INTO demo_scenarios (scenarioName, isActive, activatedAt, parameters) VALUES (?, 1, ?, ?);", [scenarioName, timestamp, paramsJson]);
+        }
+        // Refresh cache
+        this.currentScenario = await this.getActiveScenario();
+    }
+    /**
+     * Reset to normal operations
+     */
+    async resetScenario() {
+        await (0, connection_1.runQuery)("UPDATE demo_scenarios SET isActive = 0;");
+        this.currentScenario = {
+            scenarioName: null,
+            isActive: false,
+            activatedAt: null,
+            parameters: {},
+        };
+    }
+    /**
+     * Get scenario modifiers for current active scenario
+     */
+    async getModifiers() {
+        const scenario = await this.getActiveScenario();
+        if (!scenario.isActive || !scenario.scenarioName) {
+            return {}; // No modifiers for normal operations
+        }
+        return this.getModifiersForScenario(scenario.scenarioName, scenario.parameters);
+    }
+    /**
+     * Get modifiers for a specific scenario
+     */
+    getModifiersForScenario(scenarioName, parameters) {
+        switch (scenarioName) {
+            case "normal-operations":
+                return {}; // No modifiers
+            case "morning-peak":
+                return {
+                    truckMovementMultiplier: 1.2, // More trucks moving
+                    swapFrequencyMultiplier: 1.3, // Higher swap frequency
+                    queueBuildUpMultiplier: 1.2, // Slight queue buildup
+                    shipmentGenerationMultiplier: 1.2, // More shipments
+                };
+            case "station-congestion":
+                return {
+                    queueBuildUpMultiplier: 2.5, // Significant queue buildup
+                    readyBatteryAvailabilityMultiplier: 0.5, // Reduce ready batteries
+                    queueThreshold: 3, // Lower threshold for alerts
+                    incidentGenerationMultiplier: 2.0, // More incidents
+                    targetStationIds: parameters.targetStationIds,
+                };
+            case "charger-fault":
+                return {
+                    chargerFaultMultiplier: 10.0, // Much higher fault probability
+                    chargerAvailabilityMultiplier: 0.7, // Reduce available chargers
+                    chargingRateMultiplier: 0.8, // Slower charging due to faults
+                    targetStationIds: parameters.targetStationIds,
+                };
+            case "refrigerated-priority":
+                return {
+                    refrigeratedShipmentMultiplier: 2.0, // More refrigerated shipments
+                    socDrainMultiplier: 1.3, // Higher SOC drain (more refrigerated trucks active)
+                    networkLoadMultiplier: 1.2, // Higher network load
+                    swapFrequencyMultiplier: 1.2, // More swaps due to higher energy consumption
+                };
+            case "high-revenue-day":
+                return {
+                    swapFrequencyMultiplier: 1.5, // More swaps
+                    shipmentGenerationMultiplier: 1.4, // More shipments
+                    freightCompletionMultiplier: 1.3, // Faster freight completion
+                    truckMovementMultiplier: 1.1, // More active trucks
+                };
+            case "low-battery-stress":
+                return {
+                    readyBatteryAvailabilityMultiplier: 0.3, // Very few ready batteries
+                    chargingRateMultiplier: 0.9, // Slightly slower charging
+                    queueBuildUpMultiplier: 1.5, // Queue buildup due to battery shortage
+                    incidentGenerationMultiplier: 1.5, // More battery shortage incidents
+                };
+            case "grid-constraint-warning":
+                return {
+                    networkLoadMultiplier: 1.5, // Higher network load
+                    chargingRateMultiplier: 0.85, // Reduced charging rate
+                    gridNoticeProbability: 0.3, // 30% chance of grid notice per cycle
+                    chargerAvailabilityMultiplier: 0.9, // Slightly reduced charger availability
+                };
+            default:
+                return {};
+        }
+    }
+    /**
+     * Check if a specific scenario is active
+     */
+    async isScenarioActive(scenarioName) {
+        const scenario = await this.getActiveScenario();
+        return scenario.isActive && scenario.scenarioName === scenarioName;
+    }
+    /**
+     * Get all available scenarios
+     */
+    getAllScenarios() {
+        return [
+            { name: "normal-operations", description: "Normal operations (baseline)" },
+            { name: "morning-peak", description: "Morning peak traffic and demand" },
+            { name: "station-congestion", description: "Station congestion with queue buildup" },
+            { name: "charger-fault", description: "Charger faults at selected stations" },
+            { name: "refrigerated-priority", description: "Increased refrigerated truck activity" },
+            { name: "high-revenue-day", description: "High revenue day with increased activity" },
+            { name: "low-battery-stress", description: "Low battery availability stress test" },
+            { name: "grid-constraint-warning", description: "Grid constraint warning with high load" },
+        ];
+    }
+}
+// Singleton instance
+exports.scenarioService = new ScenarioService();

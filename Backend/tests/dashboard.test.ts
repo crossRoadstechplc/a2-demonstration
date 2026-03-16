@@ -229,4 +229,48 @@ describe("Dashboard aggregation", () => {
     expect(eeu.body.totalShareToday).toBe(2587.5);
     expect(eeu.body.activeStations).toBe(1);
   });
+
+  it("A2 system health endpoint returns valid data", async () => {
+    const data = await setupDashboardData();
+
+    // Create additional test data for system health
+    await request(app).post("/trucks").send({
+      plateNumber: "ET-6603",
+      fleetId: data.fleetId,
+      truckType: "STANDARD",
+      batteryId: "BAT-6603",
+      status: "IDLE",
+      currentSoc: 50
+    });
+
+    await request(app).post("/trucks").send({
+      plateNumber: "ET-6604",
+      fleetId: data.fleetId,
+      truckType: "STANDARD",
+      batteryId: "BAT-6604",
+      status: "MAINTENANCE",
+      currentSoc: 20
+    });
+
+    const systemHealth = await request(app).get("/dashboard/a2/system-health");
+    
+    expect(systemHealth.status).toBe(200);
+    expect(systemHealth.body).toHaveProperty("stationsOnline");
+    expect(systemHealth.body).toHaveProperty("stationsOffline");
+    expect(systemHealth.body).toHaveProperty("trucksActive");
+    expect(systemHealth.body).toHaveProperty("trucksIdle");
+    expect(systemHealth.body).toHaveProperty("trucksMaintenance");
+    expect(systemHealth.body).toHaveProperty("driversActive");
+    expect(systemHealth.body).toHaveProperty("driversInactive");
+    expect(systemHealth.body).toHaveProperty("networkUtilization");
+    
+    expect(systemHealth.body.stationsOnline).toBe(1);
+    expect(systemHealth.body.stationsOffline).toBe(1);
+    expect(systemHealth.body.trucksActive).toBe(2); // IN_TRANSIT + READY
+    expect(systemHealth.body.trucksIdle).toBe(1);
+    expect(systemHealth.body.trucksMaintenance).toBe(1);
+    expect(typeof systemHealth.body.networkUtilization).toBe("number");
+    expect(systemHealth.body.networkUtilization).toBeGreaterThanOrEqual(0);
+    expect(systemHealth.body.networkUtilization).toBeLessThanOrEqual(100);
+  });
 });

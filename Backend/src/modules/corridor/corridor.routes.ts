@@ -530,6 +530,141 @@ corridorRouter.get("/drivers/:id", async (req, res, next) => {
   }
 });
 
+function parseTruckCode(code: string): { asPlate: string; asNumericId: number | null } {
+  const normalized = code.trim();
+  if (!normalized) {
+    return { asPlate: "", asNumericId: null };
+  }
+  const numericId = Number(normalized);
+  return {
+    asPlate: normalized,
+    asNumericId: Number.isInteger(numericId) && numericId > 0 ? numericId : null
+  };
+}
+
+async function getCurrentDriver(req: Parameters<typeof requireAuth>[0]): Promise<Driver | null> {
+  const driverId = getOrganizationIdAsNumber(req);
+  if (!driverId) {
+    return null;
+  }
+  const driver = await getQuery<Driver>("SELECT * FROM drivers WHERE id = ?;", [driverId]);
+  return driver ?? null;
+}
+
+async function clearDriverTruckLink(driverId: number, truckId: number | null): Promise<void> {
+  if (!truckId) {
+    return;
+  }
+  await runQuery("UPDATE trucks SET assignedDriverId = NULL WHERE id = ? AND assignedDriverId = ?;", [
+    truckId,
+    driverId
+  ]);
+}
+
+async function clearTruckDriverLink(driverId: number | null): Promise<void> {
+  if (!driverId) {
+    return;
+  }
+  await runQuery("UPDATE drivers SET assignedTruckId = NULL WHERE id = ?;", [driverId]);
+}
+
+corridorRouter.post(
+  "/drivers/me/attach-truck",
+  requireAuth,
+  requireAnyRole(["DRIVER"]),
+  async (req, res, next) => {
+    try {
+      const { code } = req.body as { code?: string };
+      if (!code || !code.trim()) {
+        res.status(400).json({ error: "Truck code is required" });
+        return;
+      }
+
+      const driver = await getCurrentDriver(req);
+      if (!driver) {
+        res.status(400).json({ error: "Driver account is not mapped to a valid driver profile" });
+        return;
+      }
+
+      const parsedCode = parseTruckCode(code);
+      const truckByPlate = await getQuery<Truck>(
+        "SELECT * FROM trucks WHERE UPPER(plateNumber) = UPPER(?);",
+        [parsedCode.asPlate]
+      );
+      const truck =
+        truckByPlate ??
+        (parsedCode.asNumericId
+          ? await getQuery<Truck>("SELECT * FROM trucks WHERE id = ?;", [parsedCode.asNumericId])
+          : null);
+
+      if (!truck) {
+        res.status(404).json({ error: "Truck not found for provided code" });
+        return;
+      }
+
+      if (driver.fleetId !== truck.fleetId) {
+        res.status(403).json({ error: "Truck belongs to a different fleet" });
+        return;
+      }
+
+      if (driver.assignedTruckId === truck.id && truck.assignedDriverId === driver.id) {
+        res.status(200).json({ driver, truck, status: "already-attached" });
+        return;
+      }
+
+      await clearDriverTruckLink(driver.id, driver.assignedTruckId);
+      await clearTruckDriverLink(truck.assignedDriverId);
+      await runQuery("UPDATE drivers SET assignedTruckId = ? WHERE id = ?;", [truck.id, driver.id]);
+      await runQuery("UPDATE trucks SET assignedDriverId = ? WHERE id = ?;", [driver.id, truck.id]);
+
+      const updatedDriver = await getQuery<Driver>("SELECT * FROM drivers WHERE id = ?;", [driver.id]);
+      const updatedTruck = await getQuery<Truck>("SELECT * FROM trucks WHERE id = ?;", [truck.id]);
+
+      res.status(200).json({ driver: updatedDriver, truck: updatedTruck, status: "attached" });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+corridorRouter.post(
+  "/drivers/me/detach-truck",
+  requireAuth,
+  requireAnyRole(["DRIVER"]),
+  async (req, res, next) => {
+    try {
+      const driver = await getCurrentDriver(req);
+      if (!driver) {
+        res.status(400).json({ error: "Driver account is not mapped to a valid driver profile" });
+        return;
+      }
+
+      if (!driver.assignedTruckId) {
+        res.status(200).json({ driver, truck: null, status: "already-detached" });
+        return;
+      }
+
+      const detachedTruck = await getQuery<Truck>("SELECT * FROM trucks WHERE id = ?;", [
+        driver.assignedTruckId
+      ]);
+      await runQuery("UPDATE drivers SET assignedTruckId = NULL WHERE id = ?;", [driver.id]);
+      await runQuery(
+        "UPDATE trucks SET assignedDriverId = NULL WHERE id = ? AND assignedDriverId = ?;",
+        [driver.assignedTruckId, driver.id]
+      );
+
+      const updatedDriver = await getQuery<Driver>("SELECT * FROM drivers WHERE id = ?;", [driver.id]);
+      const updatedTruck = detachedTruck
+        ? await getQuery<Truck>("SELECT * FROM trucks WHERE id = ?;", [detachedTruck.id])
+        : null;
+
+      res.status(200).json({ driver: updatedDriver, truck: updatedTruck, status: "detached" });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 function toTwoDecimals(value: number): number {
   return Number(value.toFixed(2));
 }
@@ -754,6 +889,24 @@ corridorRouter.post(
 
       if (!driver || !truck) {
         res.status(404).json({ error: "Driver or truck not found in fleet" });
+        return;
+      }
+
+      // Handle unassign (truckId === 0)
+      if (truckId === 0) {
+        const currentDriver = await getQuery<Driver>(
+          "SELECT * FROM drivers WHERE id = ? AND fleetId = ?;",
+          [driverId, fleetId]
+        );
+        if (!currentDriver || !currentDriver.assignedTruckId) {
+          res.status(400).json({ error: "Driver is not assigned to any truck" });
+          return;
+        }
+        await runQuery("UPDATE trucks SET assignedDriverId = NULL WHERE id = ?;", [
+          currentDriver.assignedTruckId,
+        ]);
+        await runQuery("UPDATE drivers SET assignedTruckId = NULL WHERE id = ?;", [driverId]);
+        res.status(200).json({ status: "ok", fleetId, driverId, truckId: null });
         return;
       }
 

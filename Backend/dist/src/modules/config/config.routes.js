@@ -215,8 +215,13 @@ configRouter.post("/stations/:id/incidents", requireAuth_1.requireAuth, (0, requ
         }
         if (req.user?.role === "STATION_OPERATOR") {
             const orgStationId = (0, accessControl_1.getOrganizationIdAsNumber)(req);
-            if (orgStationId !== stationId) {
-                res.status(403).json({ error: "Forbidden for station ownership" });
+            if (orgStationId === null || orgStationId !== stationId) {
+                res.status(403).json({
+                    error: "Forbidden: Cannot access other station's data",
+                    message: orgStationId === null
+                        ? "Your account is not linked to a station. Please contact an administrator."
+                        : `You can only access station ${orgStationId}, not station ${stationId}`
+                });
                 return;
             }
         }
@@ -241,8 +246,13 @@ configRouter.get("/stations/:id/incidents", requireAuth_1.requireAuth, (0, requi
         }
         if (req.user?.role === "STATION_OPERATOR") {
             const orgStationId = (0, accessControl_1.getOrganizationIdAsNumber)(req);
-            if (orgStationId !== stationId) {
-                res.status(403).json({ error: "Forbidden for station ownership" });
+            if (orgStationId === null || orgStationId !== stationId) {
+                res.status(403).json({
+                    error: "Forbidden: Cannot access other station's data",
+                    message: orgStationId === null
+                        ? "Your account is not linked to a station. Please contact an administrator."
+                        : `You can only access station ${orgStationId}, not station ${stationId}`
+                });
                 return;
             }
         }
@@ -265,8 +275,13 @@ configRouter.post("/stations/:id/charger-faults", requireAuth_1.requireAuth, (0,
         }
         if (req.user?.role === "STATION_OPERATOR") {
             const orgStationId = (0, accessControl_1.getOrganizationIdAsNumber)(req);
-            if (orgStationId !== stationId) {
-                res.status(403).json({ error: "Forbidden for station ownership" });
+            if (orgStationId === null || orgStationId !== stationId) {
+                res.status(403).json({
+                    error: "Forbidden: Cannot access other station's data",
+                    message: orgStationId === null
+                        ? "Your account is not linked to a station. Please contact an administrator."
+                        : `You can only access station ${orgStationId}, not station ${stationId}`
+                });
                 return;
             }
         }
@@ -293,8 +308,13 @@ configRouter.get("/stations/:id/charger-faults", requireAuth_1.requireAuth, (0, 
         }
         if (req.user?.role === "STATION_OPERATOR") {
             const orgStationId = (0, accessControl_1.getOrganizationIdAsNumber)(req);
-            if (orgStationId !== stationId) {
-                res.status(403).json({ error: "Forbidden for station ownership" });
+            if (orgStationId === null || orgStationId !== stationId) {
+                res.status(403).json({
+                    error: "Forbidden: Cannot access other station's data",
+                    message: orgStationId === null
+                        ? "Your account is not linked to a station. Please contact an administrator."
+                        : `You can only access station ${orgStationId}, not station ${stationId}`
+                });
                 return;
             }
         }
@@ -357,7 +377,7 @@ configRouter.post("/demo/scenario/:name", requireAuth_1.requireAuth, (0, require
                 await (0, connection_1.runQuery)(`
           INSERT INTO batteries
           (capacityKwh, soc, health, cycleCount, temperature, status, stationId, truckId)
-          VALUES (320, 70, 96, 120, 27, 'IN_TRUCK', NULL, ?);
+          VALUES (588, 70, 96, 120, 27, 'IN_TRUCK', NULL, ?);
         `, [truck.id]);
             }
             for (const station of stations) {
@@ -367,7 +387,7 @@ configRouter.post("/demo/scenario/:name", requireAuth_1.requireAuth, (0, require
                     await (0, connection_1.runQuery)(`
             INSERT INTO batteries
             (capacityKwh, soc, health, cycleCount, temperature, status, stationId, truckId)
-            VALUES (320, ?, 95, 80, 28, ?, ?, NULL);
+            VALUES (588, ?, 95, 80, 28, ?, ?, NULL);
           `, [soc, status, station.id]);
                 }
             }

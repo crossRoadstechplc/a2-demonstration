@@ -13,6 +13,7 @@ const billing_routes_1 = __importDefault(require("./modules/billing/billing.rout
 const charging_routes_1 = __importDefault(require("./modules/charging/charging.routes"));
 const corridor_routes_1 = __importDefault(require("./modules/corridor/corridor.routes"));
 const config_routes_1 = __importDefault(require("./modules/config/config.routes"));
+const demo_routes_1 = __importDefault(require("./modules/demo/demo.routes"));
 const dashboard_routes_1 = __importDefault(require("./modules/dashboard/dashboard.routes"));
 const freight_routes_1 = __importDefault(require("./modules/freight/freight.routes"));
 const simulation_routes_1 = __importDefault(require("./modules/simulation/simulation.routes"));
@@ -41,6 +42,7 @@ app.use(freight_routes_1.default);
 app.use(dashboard_routes_1.default);
 app.use(simulation_routes_1.default);
 app.use(config_routes_1.default);
+app.use(demo_routes_1.default);
 app.get("/health", (_req, res) => {
     res.status(200).json({
         status: "ok",
