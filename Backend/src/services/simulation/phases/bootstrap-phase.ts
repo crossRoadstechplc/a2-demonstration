@@ -281,15 +281,15 @@ async function ensureInitialRealisticData(stationIds: number[], timestamp: strin
      WHERE date(timestamp, 'localtime') = date('now', 'localtime');`
   );
 
-  // If no swaps today, seed more initial realistic data (800-1000 swaps for 2000 trucks)
-  // Target: 25M-30M ETB daily revenue
+  // If no swaps today, seed initial realistic data (~1200-1500 swaps for EOD projection)
+  // Target: 28M-35M ETB daily revenue (1400 swaps × 300 kWh avg × 70 ETB/kWh × 1.15 VAT ≈ 33.8M)
   if ((swapsToday?.count ?? 0) === 0) {
     const trucks = await allQuery<{ id: number; currentStationId: number | null }>(
-      "SELECT id, currentStationId FROM trucks ORDER BY id ASC LIMIT 1200;"
+      "SELECT id, currentStationId FROM trucks ORDER BY id ASC LIMIT 2000;"
     );
 
-    // Create 800-1000 swaps across different stations for today
-    const swapCount = Math.min(800 + randomInt(200), trucks.length);
+    // Create 1200-1500 swaps across different stations for today
+    const swapCount = Math.min(1200 + randomInt(300), trucks.length);
     for (let i = 0; i < swapCount; i++) {
       const truck = trucks[i];
       const stationId = truck.currentStationId ?? stationIds[truck.id % stationIds.length];

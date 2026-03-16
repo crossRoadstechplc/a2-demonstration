@@ -108,6 +108,96 @@ dashboardRouter.get(
 );
 
 dashboardRouter.get(
+  "/dashboard/a2/charts",
+  requireAuth,
+  requireAnyRole(["ADMIN", "A2_OPERATOR"]),
+  async (_req, res, next) => {
+    try {
+      const stations = await allQuery<{ id: number; name: string; capacity: number }>(
+        "SELECT id, name, capacity FROM stations WHERE status = 'ACTIVE' ORDER BY id;"
+      );
+
+      const swapsByStation = await allQuery<{ stationId: number; count: number }>(
+        `SELECT stationId, COUNT(*) as count FROM swap_transactions
+         WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+         GROUP BY stationId;`
+      );
+      const swapMap = new Map(
+        (swapsByStation as Array<{ stationId: number; count: number }>).map((r) => [r.stationId, r.count])
+      );
+
+      const stationUtilization = stations.map((s) => {
+        const swapsToday = swapMap.get(s.id) ?? 0;
+        const capacity = Math.max(1, s.capacity ?? 20);
+        const utilizationPct = Math.min(100, Math.round((swapsToday / capacity) * 100));
+        return { stationId: s.id, stationName: s.name, swapsToday, utilizationPct };
+      });
+
+      const batteryByStation = await allQuery<{
+        stationId: number;
+        ready: number;
+        charging: number;
+        total: number;
+      }>(
+        `SELECT stationId,
+         SUM(CASE WHEN status = 'READY' THEN 1 ELSE 0 END) as ready,
+         SUM(CASE WHEN status = 'CHARGING' THEN 1 ELSE 0 END) as charging,
+         COUNT(*) as total
+         FROM batteries WHERE stationId IS NOT NULL GROUP BY stationId;`
+      );
+      const batteryRows = batteryByStation as Array<{
+        stationId: number;
+        ready: number;
+        charging: number;
+        total: number;
+      }>;
+      const batteryInventory = stations.map((s) => {
+        const row = batteryRows.find((r) => r.stationId === s.id);
+        return {
+          stationId: s.id,
+          stationName: s.name,
+          ready: row?.ready ?? 0,
+          charging: row?.charging ?? 0,
+          total: row?.total ?? 0,
+        };
+      });
+
+      const chargingByStation = await allQuery<{ stationId: number; activeSessions: number }>(
+        `SELECT stationId, COUNT(*) as activeSessions FROM charging_sessions
+         WHERE status = 'ACTIVE' GROUP BY stationId;`
+      );
+      const chargingMap = new Map(
+        (chargingByStation as Array<{ stationId: number; activeSessions: number }>).map((r) => [
+          r.stationId,
+          r.activeSessions,
+        ])
+      );
+      const chargingActivity = stations.map((s) => ({
+        stationId: s.id,
+        stationName: s.name,
+        activeSessions: chargingMap.get(s.id) ?? 0,
+      }));
+
+      const truckMovementRows = await allQuery<{ status: string; count: number }>(
+        `SELECT status, COUNT(*) as count FROM trucks GROUP BY status;`
+      );
+      const truckMovement = (truckMovementRows as Array<{ status: string; count: number }>).map(
+        (r) => ({ label: r.status || "UNKNOWN", value: r.count })
+      );
+
+      res.status(200).json({
+        stationUtilization,
+        batteryInventory,
+        chargingActivity,
+        truckMovement,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+dashboardRouter.get(
   "/dashboard/station/:id",
   requireAuth,
   requireAnyRole(["STATION_OPERATOR", "ADMIN", "A2_OPERATOR"]),
@@ -331,28 +421,6 @@ dashboardRouter.get(
       incomingPredictions = [];
     }
     
-    // Queue size (handle case where swap_queue table might not exist yet)
-    let queueSize = 0;
-    try {
-      queueSize = await count(
-        `SELECT COUNT(*) as count
-         FROM swap_queue
-         WHERE stationId = ? AND status = 'PENDING';`,
-        [stationId]
-      );
-    } catch (error) {
-      // Table might not exist yet, ignore error
-      queueSize = 0;
-    }
-    
-    // Also count trucks at station waiting
-    const trucksAtStationWaiting = await count(
-      `SELECT COUNT(*) as count
-       FROM trucks
-       WHERE currentStationId = ? AND status = 'READY';`,
-      [stationId]
-    );
-    
       const totalQueueSize = await scopedQueries.station.countQueueSize(req);
 
       // Additional aggregates
@@ -445,7 +513,9 @@ dashboardRouter.get(
         [stationId]
       );
 
-      // Trucks currently at station
+      // Trucks at or heading to this station — includes trucks physically assigned,
+      // trucks marked ARRIVED in the swap queue, and trucks actively queued (PENDING)
+      // for this station. This gives a number consistent with the queue KPI.
       const trucksCurrentlyAtStation = await allQuery<{
         id: number;
         plateNumber: string | null;
@@ -453,11 +523,16 @@ dashboardRouter.get(
         status: string;
         truckType: string;
       }>(
-        `SELECT id, plateNumber, currentSoc, status, truckType
-         FROM trucks
-         WHERE currentStationId = ?
+        `SELECT DISTINCT t.id, t.plateNumber, t.currentSoc, t.status, t.truckType
+         FROM trucks t
+         WHERE t.currentStationId = ?
+         UNION
+         SELECT DISTINCT t.id, t.plateNumber, t.currentSoc, t.status, t.truckType
+         FROM trucks t
+         INNER JOIN swap_queue sq ON sq.truckId = t.id
+         WHERE sq.stationId = ? AND sq.status IN ('PENDING', 'ARRIVED')
          ORDER BY id ASC;`,
-        [stationId]
+        [stationId, stationId]
       );
 
       // Charger faults open
@@ -494,6 +569,16 @@ dashboardRouter.get(
         recentCompletedChargingSessions,
         incomingPredictions,
         queueSize: totalQueueSize,
+        // trucksAtStationCount: trucks physically at/in the station plus those with very
+        // low SOC (< 35%) spread across active stations — "docked or pulling in now"
+        trucksAtStationCount: await (async () => {
+          const physical = trucksCurrentlyAtStation.length;
+          const activeStations = await count(`SELECT COUNT(*) as count FROM stations WHERE status = 'ACTIVE';`);
+          const criticalApproaching = await count(
+            `SELECT COUNT(*) as count FROM trucks WHERE status = 'IN_TRANSIT' AND currentSoc < 35;`
+          );
+          return physical + Math.round(criticalApproaching / Math.max(1, activeStations));
+        })(),
         trucksCurrentlyAtStation,
         chargerFaultsOpen,
       });
@@ -590,6 +675,169 @@ dashboardRouter.get(
 );
 
 dashboardRouter.get(
+  "/dashboard/fleet/:id/energy-by-truck",
+  requireAuth,
+  requireAnyRole(["FLEET_OWNER", "ADMIN", "A2_OPERATOR"]),
+  async (req, res, next) => {
+    try {
+      const fleetId = Number(req.params.id);
+      if (Number.isNaN(fleetId)) {
+        res.status(400).json({ error: "Invalid fleet id" });
+        return;
+      }
+      const userOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
+      if (req.user?.role === "FLEET_OWNER" && userOrgId !== fleetId) {
+        res.status(403).json({ error: "Forbidden: Cannot access other fleet's data" });
+        return;
+      }
+
+      const rows = await allQuery<{
+        truckId: number;
+        plateNumber: string | null;
+        energyKwh: number;
+      }>(
+        `SELECT t.id as truckId, t.plateNumber,
+         COALESCE(SUM(s.energyDeliveredKwh), 0) as energyKwh
+         FROM trucks t
+         LEFT JOIN swap_transactions s ON s.truckId = t.id AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+         WHERE t.fleetId = ?
+         GROUP BY t.id
+         ORDER BY energyKwh DESC
+         LIMIT 20;`,
+        [fleetId]
+      );
+      const energyByTruck = (rows as Array<{ truckId: number; plateNumber: string | null; energyKwh: number }>).map(
+        (r) => ({
+          truckId: r.truckId,
+          plateNumber: r.plateNumber ?? `Truck ${r.truckId}`,
+          energyKwh: Number(Number(r.energyKwh).toFixed(1)),
+        })
+      );
+      res.status(200).json({ energyByTruck });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+dashboardRouter.get(
+  "/dashboard/fleet/:id/export",
+  requireAuth,
+  requireAnyRole(["FLEET_OWNER", "ADMIN", "A2_OPERATOR"]),
+  async (req, res, next) => {
+    try {
+      const fleetId = Number(req.params.id);
+      if (Number.isNaN(fleetId)) {
+        res.status(400).json({ error: "Invalid fleet id" });
+        return;
+      }
+      const userOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
+      if (req.user?.role === "FLEET_OWNER" && userOrgId !== fleetId) {
+        res.status(403).json({ error: "Forbidden: Cannot access other fleet's data" });
+        return;
+      }
+
+      const fleet = await getQuery<{ id: number; name: string }>(
+        "SELECT id, name FROM fleets WHERE id = ?;",
+        [fleetId]
+      );
+      if (!fleet) {
+        res.status(404).json({ error: "Fleet not found" });
+        return;
+      }
+
+      const format = (req.query.format as string) || "csv";
+      if (format !== "csv") {
+        res.status(400).json({ error: "Unsupported format. Use format=csv" });
+        return;
+      }
+
+      const originalOrgId = req.user?.organizationId;
+      if (req.user) {
+        req.user.organizationId = String(fleetId);
+      }
+
+      const totalTrucks = await count("SELECT COUNT(*) as count FROM trucks WHERE fleetId = ?;", [
+        fleetId,
+      ]);
+      const activeTrucks = await scopedQueries.fleet.countActiveTrucks(req);
+      const availableTrucks = await scopedQueries.fleet.countAvailableTrucks(req);
+      const activeDrivers = await scopedQueries.fleet.countActiveDrivers(req);
+      const swapsToday = await scopedQueries.fleet.countSwapsToday(req);
+      const fleetEnergyCostEtb = await scopedQueries.fleet.sumFleetEnergyCost(req);
+      const completedTrips = await scopedQueries.fleet.countCompletedTrips(req);
+      const maintenanceAlerts = await scopedQueries.fleet.countMaintenanceAlerts(req);
+      const refrigeratedTrucksActive = await scopedQueries.fleet.countRefrigeratedActive(req);
+
+      const trucks = await allQuery<{
+        id: number;
+        plateNumber: string | null;
+        status: string;
+        currentSoc: number;
+        truckType: string | null;
+      }>(
+        "SELECT id, plateNumber, status, currentSoc, truckType FROM trucks WHERE fleetId = ? ORDER BY id;",
+        [fleetId]
+      );
+      const energyRows = await allQuery<{ truckId: number; energyKwh: number }>(
+        `SELECT t.id as truckId, COALESCE(SUM(s.energyDeliveredKwh), 0) as energyKwh
+         FROM trucks t
+         LEFT JOIN swap_transactions s ON s.truckId = t.id AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+         WHERE t.fleetId = ?
+         GROUP BY t.id;`,
+        [fleetId]
+      );
+      const energyByTruck = new Map(
+        (energyRows as Array<{ truckId: number; energyKwh: number }>).map((r) => [
+          r.truckId,
+          Number(Number(r.energyKwh).toFixed(1)),
+        ])
+      );
+
+      if (req.user && originalOrgId) {
+        req.user.organizationId = originalOrgId;
+      }
+
+      const csvLines: string[] = [
+        "Fleet Report",
+        `Fleet,${(fleet.name ?? "").replace(/,/g, ";")}`,
+        `Generated,${new Date().toISOString()}`,
+        "",
+        "Summary",
+        "Metric,Value",
+        `Total Trucks,${totalTrucks}`,
+        `Active Trucks,${activeTrucks}`,
+        `Available Trucks,${availableTrucks}`,
+        `Active Drivers,${activeDrivers}`,
+        `Swaps Today,${swapsToday}`,
+        `Fleet Energy Cost (ETB),${fleetEnergyCostEtb}`,
+        `Completed Trips,${completedTrips}`,
+        `Maintenance Alerts,${maintenanceAlerts}`,
+        `Refrigerated Active,${refrigeratedTrucksActive}`,
+        "",
+        "Trucks",
+        "Id,Plate,Status,Current SOC %,Type,Energy Today (kWh)",
+      ];
+      for (const t of trucks as Array<{ id: number; plateNumber: string | null; status: string; currentSoc: number; truckType: string | null }>) {
+        const plate = (t.plateNumber ?? "").replace(/,/g, ";");
+        const energy = energyByTruck.get(t.id) ?? 0;
+        csvLines.push(`${t.id},${plate},${t.status},${t.currentSoc},${t.truckType ?? ""},${energy}`);
+      }
+
+      const csv = csvLines.join("\r\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="fleet-${fleetId}-report-${new Date().toISOString().slice(0, 10)}.csv"`
+      );
+      res.status(200).send(csv);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+dashboardRouter.get(
   "/dashboard/driver/:id",
   requireAuth,
   requireAnyRole(["DRIVER", "ADMIN", "A2_OPERATOR"]),
@@ -679,6 +927,13 @@ dashboardRouter.get(
       // Generate 24-hour forecast
       const forecast24h = await scopedQueries.eeu.generate24HourForecast();
 
+      // Grid capacity: 7 stations × 420 kW max each = 2940 kW
+      const GRID_CAPACITY_KW = 2940;
+      const capacityUtilizationPct =
+        GRID_CAPACITY_KW > 0
+          ? Number(((totalNetworkLoad / GRID_CAPACITY_KW) * 100).toFixed(1))
+          : 0;
+
       res.status(200).json({
         totalNetworkLoad,
         stationEnergy,
@@ -690,6 +945,7 @@ dashboardRouter.get(
         stationLoads,
         peakLoadStation,
         forecast24h,
+        capacityUtilizationPct,
         timeframe,
       });
     } catch (error) {

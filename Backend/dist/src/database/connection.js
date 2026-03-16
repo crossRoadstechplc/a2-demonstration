@@ -406,6 +406,12 @@ async function ensureShipmentColumns() {
         await runQuery("ALTER TABLE shipments ADD COLUMN deliveryLng REAL;");
     }
 }
+/** Demo tariff targets: 35 ETB/kWh EEU + 35 ETB/kWh A2 → ~27,775 ETB/swap (300 kWh avg)
+ *  1,000 swaps × 27,775 = ~27.8M ETB/day  (EEU ≈ A2 ≈ 13.5M each)
+ */
+const DEMO_EEU_RATE = 35;
+const DEMO_A2_RATE = 35;
+const DEMO_VAT_PERCENT = 15;
 async function createTariffConfigTable() {
     await runQuery(`
     CREATE TABLE IF NOT EXISTS tariff_config (
@@ -415,9 +421,36 @@ async function createTariffConfigTable() {
       vatPercent REAL NOT NULL
     );
   `);
+    // Insert with demo rates if no row exists yet
     await runQuery(`
     INSERT OR IGNORE INTO tariff_config (id, eeuRatePerKwh, a2ServiceRatePerKwh, vatPercent)
-    VALUES (1, 10, 10, 15);
+    VALUES (1, ${DEMO_EEU_RATE}, ${DEMO_A2_RATE}, ${DEMO_VAT_PERCENT});
+  `);
+    // Migrate existing rows that still have the old default rate (10 ETB/kWh)
+    await runQuery(`
+    UPDATE tariff_config
+    SET eeuRatePerKwh = ${DEMO_EEU_RATE},
+        a2ServiceRatePerKwh = ${DEMO_A2_RATE},
+        vatPercent = ${DEMO_VAT_PERCENT}
+    WHERE id = 1 AND eeuRatePerKwh < ${DEMO_EEU_RATE};
+  `);
+    // Recalculate all existing receipts that were generated at the old rate
+    // energyCharge = energyKwh * eeuRate
+    // serviceCharge = energyKwh * a2Rate
+    // subtotal = energyKwh * (eeuRate + a2Rate)
+    // vat = subtotal * (vatPct / 100)
+    // total = subtotal + vat = energyKwh * (eeuRate + a2Rate) * (1 + vatPct/100)
+    // eeuShare = energyCharge + vat/2  = energyKwh * eeuRate + subtotal * (vatPct/100) / 2
+    // a2Share  = serviceCharge + vat/2 = energyKwh * a2Rate  + subtotal * (vatPct/100) / 2
+    await runQuery(`
+    UPDATE receipts
+    SET energyCharge   = ROUND(energyKwh * ${DEMO_EEU_RATE}, 2),
+        serviceCharge  = ROUND(energyKwh * ${DEMO_A2_RATE}, 2),
+        vat            = ROUND(energyKwh * ${DEMO_EEU_RATE + DEMO_A2_RATE} * ${DEMO_VAT_PERCENT / 100}, 2),
+        total          = ROUND(energyKwh * ${DEMO_EEU_RATE + DEMO_A2_RATE} * ${1 + DEMO_VAT_PERCENT / 100}, 2),
+        eeuShare       = ROUND(energyKwh * ${DEMO_EEU_RATE} + energyKwh * ${DEMO_EEU_RATE + DEMO_A2_RATE} * ${DEMO_VAT_PERCENT / 100} / 2, 2),
+        a2Share        = ROUND(energyKwh * ${DEMO_A2_RATE}  + energyKwh * ${DEMO_EEU_RATE + DEMO_A2_RATE} * ${DEMO_VAT_PERCENT / 100} / 2, 2)
+    WHERE energyKwh IS NOT NULL AND energyCharge < energyKwh * ${DEMO_EEU_RATE} * 0.95;
   `);
 }
 async function createChargingWindowConfigTable() {

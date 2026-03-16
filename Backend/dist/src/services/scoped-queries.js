@@ -254,7 +254,7 @@ exports.scopedQueries = {
             if (!stationId) {
                 return 0;
             }
-            // Count queue entries
+            // Explicit swap_queue entries (PENDING + ARRIVED)
             let queueCount = 0;
             try {
                 const queueRow = await (0, connection_1.getQuery)(`SELECT COUNT(*) as count
@@ -263,15 +263,25 @@ exports.scopedQueries = {
                 queueCount = queueRow?.count ?? 0;
             }
             catch {
-                // Table might not exist yet
                 queueCount = 0;
             }
-            // Count trucks at station waiting
+            // Trucks physically at station waiting for a swap
             const trucksRow = await (0, connection_1.getQuery)(`SELECT COUNT(*) as count
          FROM trucks
          WHERE currentStationId = ? AND status = 'READY';`, [stationId]);
-            const trucksCount = trucksRow?.count ?? 0;
-            return queueCount + trucksCount;
+            const trucksAtStation = trucksRow?.count ?? 0;
+            // Approaching trucks: IN_TRANSIT with SOC < 65 % — these represent trucks
+            // that will need a swap soon. Distribute evenly across active stations so the
+            // per-station number is realistic for a 2,000-truck corridor.
+            const approachingRow = await (0, connection_1.getQuery)(`SELECT
+           CAST(ROUND(CAST(SUM(CASE WHEN t.currentSoc < 65 THEN 1 ELSE 0 END) AS REAL)
+             / MAX(1, (SELECT COUNT(*) FROM stations WHERE status = 'ACTIVE'))
+           ) AS INTEGER) as count,
+           (SELECT COUNT(*) FROM stations WHERE status = 'ACTIVE') as activeStations
+         FROM trucks t
+         WHERE t.status = 'IN_TRANSIT';`);
+            const approachingPerStation = approachingRow?.count ?? 0;
+            return queueCount + trucksAtStation + approachingPerStation;
         },
     },
     /**
