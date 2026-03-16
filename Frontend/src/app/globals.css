@@ -141,7 +141,7 @@ html.light body {
 }
 
 .type-label {
-  @apply text-[11px] uppercase tracking-[0.18em] text-foreground-muted;
+  @apply text-[11px] uppercase tracking-[0.18em] leading-tight text-foreground-muted;
 }
 
 .type-heading {
@@ -149,5 +149,5 @@ html.light body {
 }
 
 .type-kpi {
-  @apply text-3xl font-semibold text-foreground;
+  @apply text-4xl font-bold leading-none tracking-tight text-foreground;
 }

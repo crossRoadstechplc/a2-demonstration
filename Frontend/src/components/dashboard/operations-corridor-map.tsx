@@ -167,7 +167,7 @@ export function OperationsCorridorMap({
           ? Math.max(1, targetX - node.x)
           : Math.max(1, node.x - originX === 0 ? corridorLength : node.x - targetX);
 
-        const fullDuration = 75 + (node.id % 20);
+        const fullDuration = 225 + (node.id % 60);
         const firstLegDuration = (distancePx / corridorLength) * fullDuration;
 
         gsap.set(ref, { x: node.x, y: node.y });
@@ -383,6 +383,27 @@ export function OperationsCorridorMap({
     );
   }
 
+  function renderHoverCard() {
+    if (!hoverCard) return null;
+    return (
+      <div
+        className="pointer-events-none absolute z-20 w-56 rounded border border-border-subtle bg-background-elevated px-3 py-2 text-xs text-foreground shadow-lg"
+        style={{
+          left: `${(hoverCard.x / 900) * 100}%`,
+          top: `${(hoverCard.y / 420) * 100}%`,
+          transform: "translate(-50%, -105%)",
+        }}
+      >
+        <p className="font-semibold text-foreground">{hoverCard.title}</p>
+        <div className="mt-1 space-y-0.5 text-foreground-muted">
+          {hoverCard.lines.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -408,23 +429,7 @@ export function OperationsCorridorMap({
       <div className="pointer-events-none absolute bottom-3 right-3 rounded border border-border-subtle bg-background/70 px-2 py-1 text-[10px] uppercase tracking-widest text-foreground-muted">
         Click to expand
       </div>
-      {hoverCard ? (
-        <div
-          className="pointer-events-none absolute z-20 w-56 rounded border border-border-subtle bg-background-elevated px-3 py-2 text-xs text-foreground shadow-lg"
-          style={{
-            left: `${(hoverCard.x / 900) * 100}%`,
-            top: `${(hoverCard.y / 420) * 100}%`,
-            transform: "translate(-50%, -105%)",
-          }}
-        >
-          <p className="font-semibold text-foreground">{hoverCard.title}</p>
-          <div className="mt-1 space-y-0.5 text-foreground-muted">
-            {hoverCard.lines.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      {!isExpanded && renderHoverCard()}
 
       {isExpanded ? (
         <div
@@ -435,7 +440,7 @@ export function OperationsCorridorMap({
           }}
         >
           <div
-            className="h-[90vh] w-[96vw] rounded-xl border border-border-subtle bg-background-elevated p-3"
+            className="relative h-[90vh] w-[96vw] rounded-xl border border-border-subtle bg-background-elevated p-3"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-2 flex items-center justify-between">
@@ -448,8 +453,9 @@ export function OperationsCorridorMap({
                 Close
               </button>
             </div>
-            <div className="h-[calc(100%-36px)] rounded-lg border border-border-subtle bg-background-muted p-2">
+            <div className="relative h-[calc(100%-36px)] rounded-lg border border-border-subtle bg-background-muted p-2">
               {renderMapCanvas()}
+              {renderHoverCard()}
             </div>
           </div>
         </div>

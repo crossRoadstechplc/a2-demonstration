@@ -204,22 +204,22 @@ export function EeuDashboard() {
       <section className="dashboard-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
         <KPIStatCard
           label="Total Network Load (kW, live)"
-          value={`${kpis.totalNetworkLoadKw} kW`}
+          value={kpis.totalNetworkLoadKw.toLocaleString()}
           status={kpiStatus.totalNetworkLoadKw}
         />
         <KPIStatCard
-          label={`Station Energy (kWh/${timeframe})`}
-          value={`${kpis.totalStationEnergyTodayKwh} kWh/${timeframe === "daily" ? "day" : timeframe === "monthly" ? "month" : "year"}`}
+          label={`Station Energy, kWh (${timeframe})`}
+          value={kpis.totalStationEnergyTodayKwh.toLocaleString()}
           status={kpiStatus.totalStationEnergyTodayKwh}
         />
         <KPIStatCard
-          label={`Electricity Delivered (${timeframe})`}
-          value={formatEtb(kpis.electricityDeliveredEtb)}
+          label={`Electricity Delivered, ETB (${timeframe})`}
+          value={Math.round(kpis.electricityDeliveredEtb).toLocaleString()}
           status={kpiStatus.electricityDeliveredEtb}
         />
         <KPIStatCard
-          label={`EEU Revenue Share (${timeframe})`}
-          value={formatEtb(kpis.eeuRevenueShareEtb)}
+          label={`EEU Revenue Share, ETB (${timeframe})`}
+          value={Math.round(kpis.eeuRevenueShareEtb).toLocaleString()}
           status={kpiStatus.eeuRevenueShareEtb}
         />
         <KPIStatCard
@@ -229,8 +229,8 @@ export function EeuDashboard() {
         />
         <KPIStatCard label="Peak Load Station" value={kpis.peakLoadStation} status={kpiStatus.peakLoadStation} />
         <KPIStatCard
-          label="Forecast Load (24h)"
-          value={`${kpis.forecastLoadNext24HoursKw} kW`}
+          label="Forecast Load, kW (24h)"
+          value={kpis.forecastLoadNext24HoursKw.toLocaleString()}
           status={kpiStatus.forecastLoadNext24HoursKw}
         />
       </section>

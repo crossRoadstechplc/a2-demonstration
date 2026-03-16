@@ -484,8 +484,8 @@ export function FleetDashboard() {
         <KPIStatCard label="Active Drivers" value={String(kpis.activeDrivers)} status={kpiStatus.activeDrivers} />
         <KPIStatCard label="Swaps Today" value={String(kpis.swapsToday)} status={kpiStatus.swapsToday} />
         <KPIStatCard
-          label="Fleet Energy Cost"
-          value={currency(kpis.fleetEnergyCostEtb)}
+          label="Fleet Energy Cost (ETB)"
+          value={Math.round(kpis.fleetEnergyCostEtb).toLocaleString()}
           status={kpiStatus.fleetEnergyCostEtb}
         />
         <KPIStatCard label="Completed Trips" value={String(kpis.completedTrips)} status={kpiStatus.completedTrips} />

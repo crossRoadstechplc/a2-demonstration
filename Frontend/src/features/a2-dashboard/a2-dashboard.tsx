@@ -285,23 +285,23 @@ export function A2Dashboard() {
           status={kpiStatus.corridorEnergyToday}
         />
         <KPIStatCard
-          label="Corridor Revenue"
-          value={formatEtb(kpis.corridorRevenueEtb)}
+          label="Corridor Revenue (ETB)"
+          value={Math.round(kpis.corridorRevenueEtb).toLocaleString()}
           status={kpiStatus.corridorRevenueEtb}
         />
         <KPIStatCard
-          label="A2 Share"
-          value={formatEtb(kpis.a2ShareEtb)}
+          label="A2 Share (ETB)"
+          value={Math.round(kpis.a2ShareEtb).toLocaleString()}
           status={kpiStatus.a2ShareEtb}
         />
         <KPIStatCard
-          label="EEU Share"
-          value={formatEtb(kpis.eeuShareEtb)}
+          label="EEU Share (ETB)"
+          value={Math.round(kpis.eeuShareEtb).toLocaleString()}
           status={kpiStatus.eeuShareEtb}
         />
         <KPIStatCard
-          label="VAT Collected"
-          value={formatEtb(kpis.vatCollectedEtb)}
+          label="VAT Collected (ETB)"
+          value={Math.round(kpis.vatCollectedEtb).toLocaleString()}
           status={kpiStatus.vatCollectedEtb}
         />
         <KPIStatCard
@@ -770,8 +770,8 @@ export function A2Dashboard() {
                 status="neutral"
               />
               <KPIStatCard
-                label="Network Utilization"
-                value={`${systemHealth.networkUtilization}%`}
+                label="Network Utilization (%)"
+                value={String(systemHealth.networkUtilization)}
                 status={systemHealth.networkUtilization > 80 ? "warning" : "info"}
               />
             </section>

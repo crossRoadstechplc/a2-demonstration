@@ -412,8 +412,8 @@ export function FreightDashboard() {
           status={kpiStatus.deliveredShipments}
         />
         <KPIStatCard
-          label={`Estimated Spend (${kpiTimeframe})`}
-          value={formatEtb(kpis.estimatedSpendEtb)}
+          label={`Estimated Spend, ETB (${kpiTimeframe})`}
+          value={Math.round(kpis.estimatedSpendEtb).toLocaleString()}
           status={kpiStatus.estimatedSpendEtb}
         />
         <KPIStatCard

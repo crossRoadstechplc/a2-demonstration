@@ -24,23 +24,23 @@ export function StationKpiGrid({ kpis }: StationKpiGridProps) {
       />
       <KPIStatCard label="Swaps Today" value={String(kpis.swapsToday)} status={status.swapsToday} />
       <KPIStatCard
-        label="Energy Consumed Today"
-        value={`${Math.round(kpis.energyConsumedToday)} kWh`}
+        label="Energy Consumed Today (kWh)"
+        value={Math.round(kpis.energyConsumedToday).toLocaleString()}
         status={status.energyConsumedToday}
       />
       <KPIStatCard
-        label="Energy Charging Now"
-        value={`${Math.round(kpis.energyChargingNow)} kWh`}
+        label="Energy Charging Now (kWh)"
+        value={Math.round(kpis.energyChargingNow).toLocaleString()}
         status={status.energyChargingNow}
       />
       <KPIStatCard
-        label="Revenue Today"
-        value={`${Math.round(kpis.revenueTodayEtb).toLocaleString()} ETB`}
+        label="Revenue Today (ETB)"
+        value={Math.round(kpis.revenueTodayEtb).toLocaleString()}
         status={status.revenueTodayEtb}
       />
       <KPIStatCard
-        label="Revenue This Month"
-        value={`${Math.round(kpis.revenueThisMonthEtb).toLocaleString()} ETB`}
+        label="Revenue This Month (ETB)"
+        value={Math.round(kpis.revenueThisMonthEtb).toLocaleString()}
         status={status.revenueThisMonthEtb}
       />
       <KPIStatCard
