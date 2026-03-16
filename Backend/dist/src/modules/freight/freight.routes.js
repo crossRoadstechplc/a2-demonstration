@@ -122,24 +122,19 @@ freightRouter.post("/freight/request", async (req, res, next) => {
             });
             return;
         }
-        // Attempt immediate assignment
+        // Attempt immediate assignment — if none available, create as REQUESTED (assigned later)
         const assignment = await assignTruckAndDriverToShipment({
             pickupLocation,
             pickupLat,
             pickupLng,
             requiresRefrigeration: requiresRefrigeration ? 1 : 0,
         });
-        if (!assignment) {
-            res.status(409).json({
-                error: "No eligible truck and driver available for immediate assignment. Please try again later."
-            });
-            return;
-        }
         const timestamp = new Date().toISOString();
+        const hasAssignment = assignment !== null;
         const result = await (0, connection_1.runQuery)(`
       INSERT INTO shipments
       (pickupLocation, pickupLat, pickupLng, deliveryLocation, deliveryLat, deliveryLng, cargoDescription, weight, volume, pickupWindow, requiresRefrigeration, temperatureTarget, customerId, truckId, driverId, status, assignedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ASSIGNED', ?);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     `, [
             pickupLocation,
             pickupLat,
@@ -154,18 +149,22 @@ freightRouter.post("/freight/request", async (req, res, next) => {
             requiresRefrigeration ? 1 : 0,
             temperatureTarget ?? null,
             req.user?.role === "FREIGHT_CUSTOMER" ? req.user.id : null,
-            assignment.truckId,
-            assignment.driverId,
-            timestamp
+            hasAssignment ? assignment.truckId : null,
+            hasAssignment ? assignment.driverId : null,
+            hasAssignment ? "ASSIGNED" : "REQUESTED",
+            hasAssignment ? timestamp : null,
         ]);
-        // Update truck and driver status
-        await (0, connection_1.runQuery)("UPDATE trucks SET status = 'IN_TRANSIT', assignedDriverId = ? WHERE id = ?;", [
-            assignment.driverId,
-            assignment.truckId
-        ]);
-        await (0, connection_1.runQuery)("UPDATE drivers SET status = 'ON_DUTY' WHERE id = ?;", [assignment.driverId]);
+        if (hasAssignment) {
+            await (0, connection_1.runQuery)("UPDATE trucks SET status = 'IN_TRANSIT', assignedDriverId = ? WHERE id = ?;", [
+                assignment.driverId,
+                assignment.truckId,
+            ]);
+            await (0, connection_1.runQuery)("UPDATE drivers SET status = 'ON_DUTY' WHERE id = ?;", [assignment.driverId]);
+        }
         await addShipmentEvent(result.lastID, "REQUESTED", "Shipment request created");
-        await addShipmentEvent(result.lastID, "ASSIGNED", `Assigned truck ${assignment.truckId} and driver ${assignment.driverId}`);
+        if (hasAssignment) {
+            await addShipmentEvent(result.lastID, "ASSIGNED", `Assigned truck ${assignment.truckId} and driver ${assignment.driverId}`);
+        }
         const shipment = await (0, connection_1.getQuery)("SELECT * FROM shipments WHERE id = ?;", [
             result.lastID
         ]);
