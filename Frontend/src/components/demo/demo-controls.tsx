@@ -144,7 +144,7 @@ export function DemoControls() {
       {open ? (
         <div className="absolute right-0 top-12 z-40 w-[360px] rounded-2xl border border-border-subtle bg-background-elevated p-3 shadow-2xl">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">Stakeholder Demo</p>
+            <p className="text-sm font-semibold text-foreground">Platform Controls</p>
             <StatusBadge label={isAdmin ? "Admin" : "Operator"} variant="info" />
           </div>
 

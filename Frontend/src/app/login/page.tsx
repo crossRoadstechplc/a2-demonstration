@@ -98,7 +98,7 @@ export default function LoginPage() {
         <p className="mt-6 text-sm font-medium text-[#526787]">
           Ethiopia–Djibouti E-Corridor Platform
         </p>
-        <p className="mt-1 text-xs text-[#526787]/50">© 2025 Access Africa A2 · Investor Demo</p>
+        <p className="mt-1 text-xs text-[#526787]/50">© 2025 Access Africa A2</p>
       </div>
 
       {/* ── Right: Login form ── */}
