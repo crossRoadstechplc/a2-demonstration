@@ -2,7 +2,7 @@ import app from "./app";
 import { initializeDatabase } from "./database/connection";
 import { logError, logInfo } from "./utils/logger";
 
-const PORT = 3049;
+const PORT = 3059;
 let httpServer: ReturnType<typeof app.listen> | null = null;
 declare global {
   // Keeps a strong reference in Node 22/ts-node environments where unreferenced servers can be reclaimed.
